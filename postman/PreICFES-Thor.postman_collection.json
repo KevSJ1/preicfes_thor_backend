@@ -1,0 +1,3876 @@
+{
+  "info": {
+    "name": "PreICFES Thor API",
+    "description": "Recorrido completo de la API: registro, sesiones, institución, catálogos, contenido, cuestionario, aula, intento, calificación y auditoría.\n\nCómo usarla:\n1. Importa esta colección y el entorno `PreICFES-Thor.local.postman_environment.json`.\n2. En el entorno define `baseUrl`, `adminEmail` y `adminPassword` de un administrador activo (créalo con `npm run create-admin`).\n3. Ejecuta la colección completa con el Collection Runner, en orden: cada petición guarda en variables de colección los ids que usan las siguientes.\n\nEscribe datos (usuarios, institución, preguntas, etc.): úsala contra una base de desarrollo o desechable, nunca en producción.\nCada corrida usa un sufijo `run` distinto, así que puede repetirse sobre la misma base.\nLogin, registro, refresco, cambio de contraseña y la solicitud institucional comparten un límite de 20 peticiones cada 15 minutos por IP; una corrida usa 17.\nCon NODE_ENV=test el límite se desactiva y puedes repetirla sin esperar.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "00 Salud y errores genéricos",
+      "item": [
+        {
+          "name": "Salud del servicio",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/health"
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Identificador único por ejecución para no chocar con datos de corridas anteriores.",
+                  "pm.collectionVariables.set('run', Date.now().toString(36));",
+                  "pm.collectionVariables.set('password', 'Clave-segura-123');"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"Base de datos conectada\", () => { pm.expect(body.data.database).to.eql('connected'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "JSON inválido → 400 INVALID_JSON",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/auth/logout",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"correo\":",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código de error INVALID_JSON', () => pm.expect(pm.response.json().error.code).to.eql('INVALID_JSON'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ruta inexistente → 404",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/no-existe"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ruta protegida sin token → 401",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/auth/me"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "01 Autenticación y usuarios",
+      "item": [
+        {
+          "name": "Login administrador",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/auth/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"correo\": \"{{adminEmail}}\",\n  \"contrasena\": \"{{adminPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"Rol ADMINISTRADOR\", () => { pm.expect(body.data.user.rol).to.eql('ADMINISTRADOR'); });",
+                  "pm.collectionVariables.set('adminToken', body.data.accessToken);",
+                  "pm.collectionVariables.set('adminId', body.data.user.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Perfil propio (admin)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/auth/me"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"Devuelve el usuario\", () => { pm.expect(body.data.id).to.eql(pm.collectionVariables.get('adminId')); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Registro profesor",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/auth/register",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombres\": \"profesor\",\n  \"apellidos\": \"Prueba\",\n  \"correo\": \"profesor-{{run}}@test.local\",\n  \"contrasena\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"Cuenta PENDIENTE\", () => { pm.expect(body.data.estado).to.eql('PENDIENTE'); });",
+                  "pm.collectionVariables.set('teacherId', body.data.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Registro gestor",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/auth/register",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombres\": \"gestor\",\n  \"apellidos\": \"Prueba\",\n  \"correo\": \"gestor-{{run}}@test.local\",\n  \"contrasena\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"Cuenta PENDIENTE\", () => { pm.expect(body.data.estado).to.eql('PENDIENTE'); });",
+                  "pm.collectionVariables.set('managerId', body.data.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Registro estudiante",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/auth/register",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombres\": \"estudiante\",\n  \"apellidos\": \"Prueba\",\n  \"correo\": \"estudiante-{{run}}@test.local\",\n  \"contrasena\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"Cuenta PENDIENTE\", () => { pm.expect(body.data.estado).to.eql('PENDIENTE'); });",
+                  "pm.collectionVariables.set('studentId', body.data.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login con cuenta pendiente → 401",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/auth/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"correo\": \"estudiante-{{run}}@test.local\",\n  \"contrasena\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 401', () => pm.response.to.have.status(401));",
+                  "pm.test('Código de error INVALID_CREDENTIALS', () => pm.expect(pm.response.json().error.code).to.eql('INVALID_CREDENTIALS'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Registro con correo duplicado (mayúsculas) → 409",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/auth/register",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombres\": \"x\",\n  \"apellidos\": \"y\",\n  \"correo\": \"ESTUDIANTE-{{run}}@TEST.LOCAL\",\n  \"contrasena\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 409', () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Registro con campo extra (rol) → 400",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/auth/register",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombres\": \"x\",\n  \"apellidos\": \"y\",\n  \"correo\": \"extra-{{run}}@test.local\",\n  \"contrasena\": \"{{password}}\",\n  \"rol\": \"ADMINISTRADOR\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código de error VALIDATION_ERROR', () => pm.expect(pm.response.json().error.code).to.eql('VALIDATION_ERROR'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Activar profesor con rol PROFESOR",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/users/{{teacherId}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"estado\": \"ACTIVO\",\n  \"rol\": \"PROFESOR\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"Activo y con rol\", () => { pm.expect(body.data.estado).to.eql('ACTIVO'); pm.expect(body.data.rol).to.eql('PROFESOR'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Activar gestor con rol GESTOR_INSTITUCIONAL",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/users/{{managerId}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"estado\": \"ACTIVO\",\n  \"rol\": \"GESTOR_INSTITUCIONAL\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"Activo y con rol\", () => { pm.expect(body.data.estado).to.eql('ACTIVO'); pm.expect(body.data.rol).to.eql('GESTOR_INSTITUCIONAL'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Activar estudiante con rol ESTUDIANTE",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/users/{{studentId}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"estado\": \"ACTIVO\",\n  \"rol\": \"ESTUDIANTE\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"Activo y con rol\", () => { pm.expect(body.data.estado).to.eql('ACTIVO'); pm.expect(body.data.rol).to.eql('ESTUDIANTE'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login profesor",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/auth/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"correo\": \"profesor-{{run}}@test.local\",\n  \"contrasena\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"Incluye fotoPerfilUrl\", () => { pm.expect(body.data.user).to.have.property('fotoPerfilUrl'); });",
+                  "pm.collectionVariables.set('teacherToken', body.data.accessToken);",
+                  "pm.collectionVariables.set('teacherRefresh', body.data.refreshToken);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login gestor",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/auth/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"correo\": \"gestor-{{run}}@test.local\",\n  \"contrasena\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"Incluye fotoPerfilUrl\", () => { pm.expect(body.data.user).to.have.property('fotoPerfilUrl'); });",
+                  "pm.collectionVariables.set('managerToken', body.data.accessToken);",
+                  "pm.collectionVariables.set('managerRefresh', body.data.refreshToken);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login estudiante",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/auth/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"correo\": \"estudiante-{{run}}@test.local\",\n  \"contrasena\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"Incluye fotoPerfilUrl\", () => { pm.expect(body.data.user).to.have.property('fotoPerfilUrl'); });",
+                  "pm.collectionVariables.set('studentToken', body.data.accessToken);",
+                  "pm.collectionVariables.set('studentRefresh', body.data.refreshToken);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Cargar foto de perfil propia",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{studentToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/users/me",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fotoPerfilUrl\": \"https://cdn.example.com/perfil-{{run}}.png\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"Foto guardada\", () => { pm.expect(body.data.fotoPerfilUrl).to.eql(`https://cdn.example.com/perfil-${pm.collectionVariables.get('run')}.png`); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Foto de perfil con URL no http(s) → 400",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{studentToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/users/me",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fotoPerfilUrl\": \"ftp://cdn.example.com/a.png\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Perfil propio muestra la foto",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{studentToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/auth/me"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"fotoPerfilUrl\", () => { pm.expect(body.data.fotoPerfilUrl).to.include('https://cdn.example.com/perfil-'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Proveedores de inicio de sesión",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/auth/providers"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"Informa si Google está habilitado\", () => { pm.expect(body.data.google.habilitado).to.be.a('boolean'); });",
+                  "pm.collectionVariables.set('googleEnabled', String(body.data.google.habilitado));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login con Google con token inválido",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/auth/google",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"idToken\": \"no-es-un-id-token-de-google\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Sin GOOGLE_CLIENT_ID responde 503; configurado, rechaza el token falso con 401.",
+                  "const enabled = pm.collectionVariables.get('googleEnabled') === 'true';",
+                  "pm.test(\"Estado esperado\", () => { pm.response.to.have.status(enabled ? 401 : 503); });",
+                  "pm.test(\"Código esperado\", () => { pm.expect(pm.response.json().error.code).to.eql(enabled ? 'INVALID_GOOGLE_TOKEN' : 'GOOGLE_NOT_CONFIGURED'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Estudiante intenta modificar usuarios → 403",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{studentToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/users/{{studentId}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"estado\": \"ACTIVO\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 403', () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Id no UUID → 400",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/users/no-es-uuid"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Listar usuarios filtrados",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/users?rol=PROFESOR&q={{run}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"Incluye al profesor\", () => { pm.expect(body.data.map((u) => u.id)).to.include(pm.collectionVariables.get('teacherId')); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Detalle de usuario",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/users/{{teacherId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"Trae instituciones\", () => { pm.expect(body.data.instituciones).to.be.an(\"array\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin no puede bloquearse a sí mismo → 409",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/users/{{adminId}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"estado\": \"BLOQUEADO\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 409', () => pm.response.to.have.status(409));",
+                  "pm.test('Código de error SELF_LOCKOUT', () => pm.expect(pm.response.json().error.code).to.eql('SELF_LOCKOUT'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "02 Sesiones de refresco",
+      "item": [
+        {
+          "name": "Refrescar sesión del estudiante (rota el token)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/auth/refresh",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{studentRefresh}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('studentRefreshRotated', body.data.refreshToken);",
+                  "pm.collectionVariables.set('studentToken', body.data.accessToken);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reutilizar token rotado → 401 (revoca todo)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/auth/refresh",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{studentRefresh}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "El token nuevo también quedó revocado → 401",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/auth/refresh",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{studentRefreshRotated}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Logout del profesor",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/auth/logout",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{teacherRefresh}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 204', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Refrescar tras logout → 401",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/auth/refresh",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{teacherRefresh}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Cambio de contraseña con clave actual errónea → 401",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{teacherToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/auth/change-password",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"contrasenaActual\": \"no-es-la-clave\",\n  \"contrasenaNueva\": \"Otra-clave-segura-456\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 401', () => pm.response.to.have.status(401));",
+                  "pm.test('Código de error INVALID_CREDENTIALS', () => pm.expect(pm.response.json().error.code).to.eql('INVALID_CREDENTIALS'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "03 Instituciones y miembros",
+      "item": [
+        {
+          "name": "Solicitud institucional pública",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/institution-requests",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombreInstitucion\": \"Colegio {{run}}\",\n  \"nombreResponsable\": \"Rectora\",\n  \"cargo\": \"Rectora\",\n  \"correoInstitucional\": \"rectoria-{{run}}@test.local\",\n  \"telefono\": \"3000000000\",\n  \"ciudad\": \"Montería\",\n  \"rangoEstudiantes\": \"100-500\",\n  \"aceptaPoliticaDatos\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('requestId', body.data.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Listar solicitudes pendientes",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/institution-requests?estado=PENDIENTE"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"Incluye la solicitud\", () => { pm.expect(body.data.map((s) => s.id)).to.include(pm.collectionVariables.get('requestId')); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Pasar solicitud a EN_REVISION",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/institution-requests/{{requestId}}/review",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"estado\": \"EN_REVISION\",\n  \"notasInternas\": \"Llamar a rectoría\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Aprobar solicitud (crea institución)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/institution-requests/{{requestId}}/review",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"estado\": \"APROBADA\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"Crea la institución\", () => { pm.expect(body.data.institucionId).to.be.a(\"string\"); });",
+                  "pm.collectionVariables.set('institutionId', body.data.institucionId);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Rechazar una solicitud aprobada → 409",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/institution-requests/{{requestId}}/review",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"estado\": \"RECHAZADA\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 409', () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin vincula al gestor",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/institutions/{{institutionId}}/members",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"correo\": \"gestor-{{run}}@test.local\",\n  \"rol\": \"GESTOR_INSTITUCIONAL\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 201', () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Gestor vincula a un estudiante como profesor → 400 ROLE_MISMATCH",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              },
+              {
+                "key": "X-Institution-Id",
+                "value": "{{institutionId}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/institutions/{{institutionId}}/members",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"correo\": \"estudiante-{{run}}@test.local\",\n  \"rol\": \"PROFESOR\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código de error ROLE_MISMATCH', () => pm.expect(pm.response.json().error.code).to.eql('ROLE_MISMATCH'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Gestor vincula al profesor",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              },
+              {
+                "key": "X-Institution-Id",
+                "value": "{{institutionId}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/institutions/{{institutionId}}/members",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"correo\": \"profesor-{{run}}@test.local\",\n  \"rol\": \"PROFESOR\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('teacherMemberId', body.data.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Gestor sin X-Institution-Id → 403",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/institutions/{{institutionId}}/members",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"correo\": \"profesor-{{run}}@test.local\",\n  \"rol\": \"PROFESOR\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 403', () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Listar miembros",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              },
+              {
+                "key": "X-Institution-Id",
+                "value": "{{institutionId}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/institutions/{{institutionId}}/members"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"Dos miembros\", () => { pm.expect(body.data).to.have.lengthOf(2); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Gestor actualiza datos de la institución",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              },
+              {
+                "key": "X-Institution-Id",
+                "value": "{{institutionId}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/institutions/{{institutionId}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"direccion\": \"Calle 1 # 2-3\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"Dirección guardada\", () => { pm.expect(body.data.direccion).to.eql('Calle 1 # 2-3'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Gestor cambia el estado → 403",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              },
+              {
+                "key": "X-Institution-Id",
+                "value": "{{institutionId}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/institutions/{{institutionId}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"estado\": \"INACTIVA\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 403', () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Instituciones del profesor",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{teacherToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/users/me/institutions"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"Vinculado como PROFESOR\", () => { pm.expect(body.data.find((i) => i.id === pm.collectionVariables.get('institutionId')).rol).to.eql('PROFESOR'); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "04 Catálogos",
+      "item": [
+        {
+          "name": "Catálogos públicos",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/catalogs"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "const math = body.data.pruebas.find((p) => p.codigo === 'MATEMATICAS');",
+                  "pm.test(\"Existe la prueba MATEMATICAS\", () => { pm.expect(math).to.be.an(\"object\"); });",
+                  "pm.collectionVariables.set('pruebaId', math.id);",
+                  "pm.collectionVariables.set('tipoPreguntaId', body.data.tiposPregunta[0].id);",
+                  "pm.collectionVariables.set('dificultadId', body.data.dificultades[0].id);",
+                  "pm.collectionVariables.set('modalidadId', body.data.modalidades.find((m) => m.codigo === 'RAPIDO').id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Profesor crea competencia → 403",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{teacherToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/catalogs/pruebas/{{pruebaId}}/competencias",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"codigo\": \"X\",\n  \"nombre\": \"X\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 403', () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Crear competencia",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/catalogs/pruebas/{{pruebaId}}/competencias",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"codigo\": \"C-{{run}}\",\n  \"nombre\": \"Razonamiento\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('competenciaId', body.data.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Crear afirmación",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/catalogs/competencias/{{competenciaId}}/afirmaciones",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"codigo\": \"A1\",\n  \"descripcion\": \"Afirmación\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('afirmacionId', body.data.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Crear evidencia",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/catalogs/afirmaciones/{{afirmacionId}}/evidencias",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"codigo\": \"E1\",\n  \"descripcion\": \"Evidencia\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('evidenciaId', body.data.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Crear tarea",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/catalogs/evidencias/{{evidenciaId}}/tareas",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"codigo\": \"T1\",\n  \"descripcion\": \"Tarea\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('tareaId', body.data.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Crear componente",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/catalogs/pruebas/{{pruebaId}}/componentes",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Álgebra {{run}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('componenteId', body.data.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Crear tema",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/catalogs/componentes/{{componenteId}}/temas",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Ecuaciones\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('temaId', body.data.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Listar temas del componente",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/catalogs/componentes/{{componenteId}}/temas"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"Un tema\", () => { pm.expect(body.data).to.have.lengthOf(1); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Actualizar tema",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/catalogs/temas/{{temaId}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"descripcion\": \"Ecuaciones lineales\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "05 Contenido",
+      "item": [
+        {
+          "name": "Registrar recurso multimedia",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{teacherToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/media",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tipo\": \"IMAGEN\",\n  \"url\": \"https://cdn.example.com/grafica.png\",\n  \"nombreArchivo\": \"grafica.png\",\n  \"mimeType\": \"image/png\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('mediaId', body.data.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Recurso con mimeType incoherente → 400",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{teacherToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/media",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tipo\": \"IMAGEN\",\n  \"url\": \"https://cdn.example.com/a.pdf\",\n  \"nombreArchivo\": \"a.pdf\",\n  \"mimeType\": \"application/pdf\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Crear fuente",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{teacherToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/media/sources",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Banco propio {{run}}\",\n  \"tipo\": \"PROPIA\",\n  \"anio\": 2026\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 201', () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Crear estímulo",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{teacherToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/stimuli",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"titulo\": \"Texto base\",\n  \"contenido\": \"Un tren sale a las 8...\",\n  \"recursos\": [\n    \"{{mediaId}}\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('stimulusVersionId', body.data.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Crear pregunta",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{teacherToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/questions",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tipoPreguntaId\": \"{{tipoPreguntaId}}\",\n  \"dificultadId\": \"{{dificultadId}}\",\n  \"tareaId\": \"{{tareaId}}\",\n  \"estimuloVersionId\": \"{{stimulusVersionId}}\",\n  \"enunciado\": \"¿1+1?\",\n  \"explicacion\": \"Porque 1 + 1 = 2\",\n  \"opciones\": [\n    {\n      \"letra\": \"A\",\n      \"contenido\": \"2\",\n      \"orden\": 1\n    },\n    {\n      \"letra\": \"B\",\n      \"contenido\": \"3\",\n      \"orden\": 2\n    }\n  ],\n  \"respuestaCorrecta\": \"A\",\n  \"temas\": [\n    \"{{temaId}}\"\n  ],\n  \"recursos\": [\n    \"{{mediaId}}\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('questionVersion1Id', body.data.versionId);",
+                  "pm.collectionVariables.set('preguntaId', body.data.preguntaId);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Publicar pregunta con estímulo en borrador → 400",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{teacherToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/questions/{{questionVersion1Id}}/publish"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Publicar estímulo",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{teacherToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/stimuli/{{stimulusVersionId}}/publish"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Publicar pregunta",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{teacherToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/questions/{{questionVersion1Id}}/publish"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Pregunta con clave inexistente → 400",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{teacherToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/questions",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tipoPreguntaId\": \"{{tipoPreguntaId}}\",\n  \"dificultadId\": \"{{dificultadId}}\",\n  \"tareaId\": \"{{tareaId}}\",\n  \"estimuloVersionId\": \"{{stimulusVersionId}}\",\n  \"enunciado\": \"x\",\n  \"explicacion\": \"Porque 1 + 1 = 2\",\n  \"opciones\": [\n    {\n      \"letra\": \"A\",\n      \"contenido\": \"2\",\n      \"orden\": 1\n    },\n    {\n      \"letra\": \"B\",\n      \"contenido\": \"3\",\n      \"orden\": 2\n    }\n  ],\n  \"respuestaCorrecta\": \"Z\",\n  \"temas\": [\n    \"{{temaId}}\"\n  ],\n  \"recursos\": [\n    \"{{mediaId}}\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Importación masiva con errores por fila",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{teacherToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/questions/import",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombreArchivo\": \"banco.json\",\n  \"preguntas\": [\n    {\n      \"tipoPreguntaId\": \"{{tipoPreguntaId}}\",\n      \"dificultadId\": \"{{dificultadId}}\",\n      \"tareaId\": \"{{tareaId}}\",\n      \"estimuloVersionId\": \"{{stimulusVersionId}}\",\n      \"enunciado\": \"¿2+0?\",\n      \"explicacion\": \"Porque 1 + 1 = 2\",\n      \"opciones\": [\n        {\n          \"letra\": \"A\",\n          \"contenido\": \"2\",\n          \"orden\": 1\n        },\n        {\n          \"letra\": \"B\",\n          \"contenido\": \"3\",\n          \"orden\": 2\n        }\n      ],\n      \"respuestaCorrecta\": \"A\",\n      \"temas\": [\n        \"{{temaId}}\"\n      ],\n      \"recursos\": [\n        \"{{mediaId}}\"\n      ]\n    },\n    {\n      \"enunciado\": \"incompleta\"\n    },\n    {\n      \"tipoPreguntaId\": \"{{tipoPreguntaId}}\",\n      \"dificultadId\": \"{{dificultadId}}\",\n      \"tareaId\": \"{{tareaId}}\",\n      \"estimuloVersionId\": \"{{stimulusVersionId}}\",\n      \"enunciado\": \"¿mala ref?\",\n      \"explicacion\": \"Porque 1 + 1 = 2\",\n      \"opciones\": [\n        {\n          \"letra\": \"A\",\n          \"contenido\": \"2\",\n          \"orden\": 1\n        },\n        {\n          \"letra\": \"B\",\n          \"contenido\": \"3\",\n          \"orden\": 2\n        }\n      ],\n      \"respuestaCorrecta\": \"A\",\n      \"temas\": [\n        \"{{$guid}}\"\n      ],\n      \"recursos\": [\n        \"{{mediaId}}\"\n      ]\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"1 fila buena y 2 fallidas\", () => { pm.expect(body.data.estado).to.eql('COMPLETADA_CON_ERRORES'); pm.expect(body.data.filasExitosas).to.eql(1); pm.expect(body.data.filasFallidas).to.eql(2); });",
+                  "pm.collectionVariables.set('importId', body.data.id);",
+                  "pm.collectionVariables.set('questionVersion2Id', body.data.preguntas[0].versionId);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Detalle del lote de importación",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{teacherToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/questions/imports/{{importId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"Fila 3 con INVALID_REFERENCE\", () => { pm.expect(body.data.errores.some((e) => e.fila === 3 && e.codigo === 'INVALID_REFERENCE')).to.be.true; });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Publicar pregunta importada",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{teacherToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/questions/{{questionVersion2Id}}/publish"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Nueva versión de la pregunta",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{teacherToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/questions/{{preguntaId}}/versions",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tipoPreguntaId\": \"{{tipoPreguntaId}}\",\n  \"dificultadId\": \"{{dificultadId}}\",\n  \"tareaId\": \"{{tareaId}}\",\n  \"estimuloVersionId\": \"{{stimulusVersionId}}\",\n  \"enunciado\": \"¿1+1? (v2)\",\n  \"explicacion\": \"Porque 1 + 1 = 2\",\n  \"opciones\": [\n    {\n      \"letra\": \"A\",\n      \"contenido\": \"2\",\n      \"orden\": 1\n    },\n    {\n      \"letra\": \"B\",\n      \"contenido\": \"3\",\n      \"orden\": 2\n    }\n  ],\n  \"respuestaCorrecta\": \"A\",\n  \"temas\": [\n    \"{{temaId}}\"\n  ],\n  \"recursos\": [\n    \"{{mediaId}}\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('questionVersion1bId', body.data.versionId);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Publicar nueva versión",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{teacherToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/questions/{{questionVersion1bId}}/publish"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "La versión anterior quedó ARCHIVADA",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{teacherToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/questions/{{questionVersion1Id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"ARCHIVADA\", () => { pm.expect(body.data.estado).to.eql('ARCHIVADA'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Detalle de pregunta (autor ve la clave)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{teacherToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/questions/{{questionVersion1bId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"Clave A y un recurso\", () => { pm.expect(body.data.clave.letra).to.eql('A'); pm.expect(body.data.recursos).to.have.lengthOf(1); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Buscar preguntas por tema",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{teacherToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/questions?temaId={{temaId}}&estado=PUBLICADA"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"Dos publicadas\", () => { pm.expect(body.data).to.have.lengthOf(2); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "06 Plantillas y cuestionarios",
+      "item": [
+        {
+          "name": "Modalidades",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{teacherToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/templates/modalities"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Crear plantilla",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{teacherToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/templates",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"modalidadId\": \"{{modalidadId}}\",\n  \"nombre\": \"Rápido {{run}}\",\n  \"sesiones\": [\n    {\n      \"pruebaId\": \"{{pruebaId}}\",\n      \"numeroSesion\": 1,\n      \"cantidadPreguntas\": 2,\n      \"duracionMinutos\": 30,\n      \"orden\": 1\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('templateId', body.data.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Crear cuestionario",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{teacherToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/questionnaires",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"plantillaId\": \"{{templateId}}\",\n  \"nombre\": \"Simulacro {{run}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('questionnaireId', body.data.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Publicar cuestionario vacío → 400",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{teacherToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/questionnaires/{{questionnaireId}}/publish"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Agregar sesión",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{teacherToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/questionnaires/{{questionnaireId}}/sessions",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"numeroSesion\": 1,\n  \"nombre\": \"Sesión 1\",\n  \"duracionMinutos\": 30,\n  \"orden\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('sessionId', body.data.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Agregar ítem 1",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{teacherToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/questionnaires/{{questionnaireId}}/sessions/{{sessionId}}/items",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"versionPreguntaId\": \"{{questionVersion1bId}}\",\n  \"orden\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 201', () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Agregar ítem 2",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{teacherToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/questionnaires/{{questionnaireId}}/sessions/{{sessionId}}/items",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"versionPreguntaId\": \"{{questionVersion2Id}}\",\n  \"orden\": 2\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 201', () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Publicar cuestionario",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{teacherToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/questionnaires/{{questionnaireId}}/publish"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"PUBLICADO\", () => { pm.expect(body.data.estado).to.eql('PUBLICADO'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Agregar sesión a cuestionario publicado → 409",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{teacherToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/questionnaires/{{questionnaireId}}/sessions",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"numeroSesion\": 2,\n  \"nombre\": \"x\",\n  \"duracionMinutos\": 1,\n  \"orden\": 2\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 409', () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Detalle del cuestionario",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{teacherToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/questionnaires/{{questionnaireId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"Una sesión\", () => { pm.expect(body.data.sesiones).to.have.lengthOf(1); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "07 Aulas, matrícula y asignaciones",
+      "item": [
+        {
+          "name": "Crear aula sin X-Institution-Id → 400",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{teacherToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/classrooms",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"11A\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Crear aula",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{teacherToken}}"
+              },
+              {
+                "key": "X-Institution-Id",
+                "value": "{{institutionId}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/classrooms",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"11A\",\n  \"descripcion\": \"Grado once\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('classroomId', body.data.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Crear invitación",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{teacherToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/classrooms/{{classroomId}}/invitations",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"usosMaximos\": 30\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "// Los códigos no distinguen mayúsculas: el estudiante lo usa en minúsculas.",
+                  "pm.collectionVariables.set('inviteCode', body.data.codigo.toLowerCase());"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Estudiante se matricula con el código",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{studentToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/classrooms/enroll",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"codigo\": \"{{inviteCode}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 201', () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Matricularse dos veces → 409",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{studentToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/classrooms/enroll",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"codigo\": \"{{inviteCode}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 409', () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin no puede asignar en aula ajena → 403",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/classrooms/{{classroomId}}/assignments",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cuestionarioId\": \"{{questionnaireId}}\",\n  \"fechaApertura\": \"{{fechaApertura}}\",\n  \"fechaCierre\": \"{{fechaCierre}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set('fechaApertura', new Date(Date.now() - 60000).toISOString());",
+                  "pm.collectionVariables.set('fechaCierre', new Date(Date.now() + 86400000).toISOString());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 403', () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Profesor crea asignación",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{teacherToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/classrooms/{{classroomId}}/assignments",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cuestionarioId\": \"{{questionnaireId}}\",\n  \"intentosPermitidos\": 2,\n  \"fechaApertura\": \"{{fechaApertura}}\",\n  \"fechaCierre\": \"{{fechaCierre}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('assignmentId', body.data.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Aulas del estudiante",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{studentToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/classrooms/mine"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"Asignación ABIERTA\", () => { pm.expect(body.data[0].asignaciones[0].estado).to.eql('ABIERTA'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Estudiantes del aula",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{teacherToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/classrooms/{{classroomId}}/students"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"Un estudiante\", () => { pm.expect(body.data).to.have.lengthOf(1); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Asignaciones del aula",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{teacherToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/classrooms/{{classroomId}}/assignments"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "08 Intentos y calificación",
+      "item": [
+        {
+          "name": "Iniciar intento asignado",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{studentToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/attempts/assignments/{{assignmentId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('attemptId', body.data.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Segundo intento simultáneo → 409",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{studentToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/attempts/assignments/{{assignmentId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 409', () => pm.response.to.have.status(409));",
+                  "pm.test('Código de error ATTEMPT_IN_PROGRESS', () => pm.expect(pm.response.json().error.code).to.eql('ATTEMPT_IN_PROGRESS'));",
+                  "pm.test(\"Devuelve el intento en curso\", () => { pm.expect(pm.response.json().error.details.intentoId).to.eql(pm.collectionVariables.get('attemptId')); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ver intento (sin claves)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{studentToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/attempts/{{attemptId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"Tiene fecha límite\", () => { pm.expect(body.data.fechaLimite).to.be.ok; });",
+                  "pm.test(\"El estudiante no recibe claves\", () => { pm.expect(pm.response.text()).to.not.include('clave'); });",
+                  "const [first, second] = body.data.sesiones[0].items;",
+                  "const option = (item, letra) => item.opciones.find((o) => o.letra === letra).id;",
+                  "pm.collectionVariables.set('item1Id', first.id);",
+                  "pm.collectionVariables.set('item1OptionA', option(first, 'A'));",
+                  "pm.collectionVariables.set('item2Id', second.id);",
+                  "pm.collectionVariables.set('item2OptionB', option(second, 'B'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Responder ítem 1 (correcta)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{studentToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/attempts/{{attemptId}}/answers/{{item1Id}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"opcionId\": \"{{item1OptionA}}\",\n  \"tiempoSegundos\": 40\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Responder ítem 2 (incorrecta)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{studentToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/attempts/{{attemptId}}/answers/{{item2Id}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"opcionId\": \"{{item2OptionB}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Opción de otro ítem → 400",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{studentToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/attempts/{{attemptId}}/answers/{{item2Id}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"opcionId\": \"{{item1OptionA}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Finalizar intento",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{studentToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/attempts/{{attemptId}}/finish"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"FINALIZADO con 50 %\", () => { pm.expect(body.data.estado).to.eql('FINALIZADO'); pm.expect(Number(body.data.resultado.porcentaje)).to.eql(50); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Resultado del intento",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{studentToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/attempts/{{attemptId}}/result"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Revisión docente con claves",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{teacherToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/attempts/{{attemptId}}/review"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"Aciertos [true, false]\", () => { pm.expect(body.data.sesiones[0].items.map((i) => i.correcta)).to.eql([true, false]); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Estudiante pide la revisión → 403",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{studentToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/attempts/{{attemptId}}/review"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 403', () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Resultados del aula",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{teacherToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/classrooms/{{classroomId}}/results"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"Un resultado\", () => { pm.expect(body.data).to.have.lengthOf(1); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Progreso de la institución",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{managerToken}}"
+              },
+              {
+                "key": "X-Institution-Id",
+                "value": "{{institutionId}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/institutions/{{institutionId}}/progress"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"Promedio 50 %\", () => { pm.expect(Number(body.data[0].promedioPorcentaje)).to.eql(50); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Iniciar intento libre",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{studentToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/attempts/free",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cuestionarioId\": \"{{questionnaireId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('freeAttemptId', body.data.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Finalizar intento libre sin respuestas",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{studentToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/attempts/{{freeAttemptId}}/finish"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Historial de intentos",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{studentToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/attempts"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"Dos intentos\", () => { pm.expect(body.data).to.have.lengthOf(2); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "09 Cierre de asignación y auditoría",
+      "item": [
+        {
+          "name": "Iniciar segundo intento asignado",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{studentToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/attempts/assignments/{{assignmentId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('attempt2Id', body.data.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ver segundo intento",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{studentToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/attempts/{{attempt2Id}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "const item = body.data.sesiones[0].items[0];",
+                  "pm.collectionVariables.set('attempt2ItemId', item.id);",
+                  "pm.collectionVariables.set('attempt2OptionId', item.opciones[0].id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Profesor cierra la asignación",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{teacherToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/classrooms/{{classroomId}}/assignments/{{assignmentId}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"estado\": \"CERRADA\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Responder tras el cierre → 403 ATTEMPT_EXPIRED",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{studentToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/attempts/{{attempt2Id}}/answers/{{attempt2ItemId}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"opcionId\": \"{{attempt2OptionId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 403', () => pm.response.to.have.status(403));",
+                  "pm.test('Código de error ATTEMPT_EXPIRED', () => pm.expect(pm.response.json().error.code).to.eql('ATTEMPT_EXPIRED'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "El intento quedó VENCIDO",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{studentToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/attempts/{{attempt2Id}}/result"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"VENCIDO\", () => { pm.expect(body.data.estado).to.eql('VENCIDO'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Bitácora de la institución",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/audit?institutionId={{institutionId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "const actions = body.data.map((e) => e.accion);",
+                  "pm.test(\"Registra CREAR_DESDE_SOLICITUD\", () => { pm.expect(actions).to.include('CREAR_DESDE_SOLICITUD'); });",
+                  "pm.test(\"Registra VINCULAR\", () => { pm.expect(actions).to.include('VINCULAR'); });",
+                  "pm.test(\"Registra ACTUALIZAR\", () => { pm.expect(actions).to.include('ACTUALIZAR'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Profesor consulta auditoría → 403",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{teacherToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/audit"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Estado 403', () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "variable": []
+}

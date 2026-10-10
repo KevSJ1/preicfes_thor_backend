@@ -1,0 +1,31 @@
+import { Router } from 'express';
+import auth from './auth.js';
+import catalogs from './catalogs.js';
+import users from './users.js';
+import institutionRequests from './institution-requests.js';
+import classrooms from './classrooms.js';
+import questions from './questions.js';
+import questionnaires from './questionnaires.js';
+import stimuli from './stimuli.js';
+import templates from './templates.js';
+import attempts from './attempts.js';
+import institutions from './institutions.js';
+import media from './media.js';
+import audit from './audit.js';
+
+const router = Router();
+router.use('/auth', auth);
+router.use('/catalogs', catalogs);
+router.use('/users', users);
+router.use('/institution-requests', institutionRequests);
+router.use('/classrooms', classrooms);
+router.use('/questions', questions);
+router.use('/questionnaires', questionnaires);
+router.use('/stimuli', stimuli);
+router.use('/templates', templates);
+router.use('/attempts', attempts);
+router.use('/institutions', institutions);
+router.use('/media', media);
+router.use('/audit', audit);
+
+export default router;

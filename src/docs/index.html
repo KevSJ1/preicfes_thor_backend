@@ -1,0 +1,968 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PreICFES Thor API · Documentación</title>
+<style>
+  :root {
+    --bg: #f7f7f5; --panel: #ffffff; --text: #1d1f23; --muted: #5d636e; --line: #e2e3e0;
+    --accent: #2f5bd3; --code-bg: #f1f2ef; --pre-bg: #1e2127; --pre-text: #e6e6e6;
+    --get: #1f7a4d; --post: #2f5bd3; --put: #8a5a00; --patch: #7a3fb0; --delete: #b42318;
+    --note-bg: #eef3ff; --warn-bg: #fff6e5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #15171b; --panel: #1c1f24; --text: #e7e8ea; --muted: #a0a6b1; --line: #2c3038;
+      --accent: #7ea2ff; --code-bg: #262a31; --pre-bg: #0f1114; --pre-text: #e6e6e6;
+      --get: #4cc38a; --post: #7ea2ff; --put: #e0a53a; --patch: #c08cf0; --delete: #ff7a6e;
+      --note-bg: #1d2638; --warn-bg: #2e2617;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  a { color: var(--accent); }
+  code { font: 0.9em ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: var(--code-bg); padding: 0.1em 0.35em; border-radius: 4px; }
+  pre { background: var(--pre-bg); color: var(--pre-text); padding: 12px 14px; border-radius: 8px; overflow-x: auto; font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; margin: 8px 0; }
+  pre code { background: none; padding: 0; color: inherit; }
+  .layout { display: grid; grid-template-columns: 260px minmax(0, 1fr); min-height: 100vh; }
+  nav { position: sticky; top: 0; height: 100vh; overflow-y: auto; border-right: 1px solid var(--line); background: var(--panel); padding: 20px 16px; }
+  nav h1 { font-size: 17px; margin: 0 0 4px; }
+  nav .version { color: var(--muted); font-size: 13px; margin-bottom: 14px; }
+  nav input { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--text); font: inherit; }
+  nav ul { list-style: none; padding: 0; margin: 14px 0 0; }
+  nav li a { display: block; padding: 4px 8px; border-radius: 5px; text-decoration: none; color: var(--text); font-size: 14px; }
+  nav li a:hover { background: var(--code-bg); }
+  nav .group { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; margin: 14px 8px 4px; }
+  main { padding: 28px clamp(16px, 4vw, 48px) 80px; max-width: 980px; }
+  main > section { margin-bottom: 44px; }
+  h2 { font-size: 24px; margin: 0 0 8px; padding-top: 8px; }
+  h3 { font-size: 17px; margin: 22px 0 6px; }
+  .lead { color: var(--muted); margin-top: 0; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; margin: 8px 0; }
+  th, td { text-align: left; border-bottom: 1px solid var(--line); padding: 7px 8px; vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; }
+  .table-wrap { overflow-x: auto; }
+  .note, .warn { padding: 10px 14px; border-radius: 8px; margin: 10px 0; font-size: 14px; }
+  .note { background: var(--note-bg); }
+  .warn { background: var(--warn-bg); }
+  .ep { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; margin: 12px 0; }
+  .ep-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
+  .ep-head code { background: none; padding: 0; font-size: 14.5px; font-weight: 600; word-break: break-all; }
+  .m { font: 700 12px ui-monospace, Menlo, Consolas, monospace; padding: 3px 7px; border-radius: 5px; color: #fff; min-width: 58px; text-align: center; }
+  .m.get { background: var(--get); } .m.post { background: var(--post); } .m.put { background: var(--put); }
+  .m.patch { background: var(--patch); } .m.delete { background: var(--delete); }
+  @media (prefers-color-scheme: dark) { .m { color: #111; } }
+  .roles { margin-left: auto; font-size: 12.5px; color: var(--muted); }
+  .ep p { margin: 8px 0 4px; }
+  .ep ul { margin: 6px 0; padding-left: 20px; font-size: 14px; }
+  .label { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; margin-top: 10px; }
+  .flow { counter-reset: step; padding-left: 0; list-style: none; }
+  .flow li { counter-increment: step; position: relative; padding-left: 34px; margin: 8px 0; }
+  .flow li::before { content: counter(step); position: absolute; left: 0; top: 1px; width: 24px; height: 24px; border-radius: 50%; background: var(--accent); color: var(--panel); font-size: 13px; font-weight: 700; display: grid; place-items: center; }
+  .hidden { display: none !important; }
+  @media (max-width: 820px) {
+    .layout { grid-template-columns: 1fr; }
+    nav { position: static; height: auto; border-right: 0; border-bottom: 1px solid var(--line); }
+    nav ul { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="layout">
+<nav>
+  <h1>PreICFES Thor API</h1>
+  <div class="version">Documentación de uso · v1</div>
+  <input id="search" type="search" placeholder="Buscar endpoint… (ej. login)" aria-label="Buscar endpoint">
+  <ul>
+    <li class="group">Guía</li>
+    <li><a href="#inicio">Primeros pasos</a></li>
+    <li><a href="#formato">Formato y errores</a></li>
+    <li><a href="#roles">Roles y permisos</a></li>
+    <li><a href="#flujos">Flujos típicos</a></li>
+    <li><a href="#google">Iniciar sesión con Google</a></li>
+    <li><a href="#postman">Probar con Postman</a></li>
+    <li class="group">Referencia</li>
+    <li><a href="#auth">Autenticación</a></li>
+    <li><a href="#usuarios">Usuarios</a></li>
+    <li><a href="#catalogos">Catálogos ICFES</a></li>
+    <li><a href="#solicitudes">Solicitudes institucionales</a></li>
+    <li><a href="#instituciones">Instituciones</a></li>
+    <li><a href="#media">Recursos y fuentes</a></li>
+    <li><a href="#estimulos">Estímulos</a></li>
+    <li><a href="#preguntas">Preguntas</a></li>
+    <li><a href="#plantillas">Plantillas</a></li>
+    <li><a href="#cuestionarios">Cuestionarios</a></li>
+    <li><a href="#aulas">Aulas</a></li>
+    <li><a href="#intentos">Intentos</a></li>
+    <li><a href="#auditoria">Auditoría</a></li>
+  </ul>
+</nav>
+
+<main>
+
+<section id="inicio">
+  <h2>Primeros pasos</h2>
+  <p class="lead">API REST para preparar a estudiantes para las pruebas ICFES: banco de preguntas, simulacros, aulas, intentos y resultados.</p>
+
+  <h3>URL base</h3>
+  <p>Todas las rutas de esta guía son relativas a:</p>
+  <pre><code><span class="base-url">http://localhost:3001</span>/api/v1</code></pre>
+  <p>Por ejemplo, <code>POST /auth/login</code> significa <code>POST <span class="base-url">http://localhost:3001</span>/api/v1/auth/login</code>.
+     El estado del servicio se consulta en <code>GET /health</code> (fuera de <code>/api/v1</code>).</p>
+
+  <h3>Autenticación en 3 pasos</h3>
+  <ol class="flow">
+    <li><strong>Inicia sesión</strong> con <code>POST /auth/login</code> (correo y contraseña) o con el botón de Google (<code>POST /auth/google</code>, ver <a href="#google">Iniciar sesión con Google</a>). Recibes un <code>accessToken</code> (dura 15 minutos), un <code>refreshToken</code> (dura 30 días) y el <code>user</code>, que incluye su foto de perfil en <code>fotoPerfilUrl</code>.</li>
+    <li><strong>Envía el access token</strong> en cada petición protegida con la cabecera <code>Authorization: Bearer &lt;accessToken&gt;</code>.</li>
+    <li><strong>Cuando expire</strong> (respuesta <code>401</code>), pide uno nuevo con <code>POST /auth/refresh</code>. Cada refresh devuelve un par de tokens <em>nuevo</em>; guarda siempre el último refresh token, el anterior deja de servir.</li>
+  </ol>
+  <pre><code>curl -X POST <span class="base-url">http://localhost:3001</span>/api/v1/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"correo":"profe@colegio.edu.co","contrasena":"mi-clave-segura"}'
+
+curl <span class="base-url">http://localhost:3001</span>/api/v1/auth/me \
+  -H 'Authorization: Bearer eyJhbGciOi...'</code></pre>
+
+  <h3>Cabecera de institución</h3>
+  <p>Profesores y gestores trabajan <em>dentro</em> de una institución. Para las operaciones institucionales (crear aulas, gestionar miembros, ver el progreso como gestor) envía también:</p>
+  <pre><code>X-Institution-Id: 6f1c2a4e-....-....-....-............</code></pre>
+  <p>La API comprueba que tengas una vinculación <strong>activa</strong> con esa institución; si no la tienes, la cabecera simplemente se ignora. Consulta tus instituciones con <code>GET /users/me/institutions</code>.</p>
+
+  <div class="note"><strong>Cuentas nuevas:</strong> registrarse con <code>POST /auth/register</code> crea un usuario <code>PENDIENTE</code> con rol <code>ESTUDIANTE</code>. No podrá iniciar sesión hasta que un administrador lo active (y, si es profesor o gestor, le cambie el rol) con <code>PATCH /users/:id</code>. Lo mismo ocurre la primera vez que alguien entra con Google con un correo que no estaba registrado.</div>
+
+  <h3>Foto de perfil</h3>
+  <p>El login, el refresh y <code>GET /auth/me</code> devuelven <code>fotoPerfilUrl</code>: la URL de la imagen de perfil del usuario, o <code>null</code> si no tiene (muestra un avatar con sus iniciales). Cada usuario la cambia con <code>PATCH /users/me</code> enviando una URL <code>http(s)</code>, normalmente la de una imagen ya subida a tu almacenamiento. Quienes entran con Google reciben su foto de Google si aún no tenían una.</p>
+</section>
+
+<section id="formato">
+  <h2>Formato de respuestas y errores</h2>
+  <p>Todas las respuestas son JSON. Una respuesta exitosa siempre envuelve el resultado en <code>data</code>:</p>
+  <pre><code>{ "data": { "id": "…", "nombre": "Aula 11A" } }</code></pre>
+  <p>Un error siempre tiene esta forma (<code>details</code> aparece solo cuando ayuda, por ejemplo en validaciones):</p>
+  <pre><code>{
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "Datos de aula inválidos",
+    "details": { "fieldErrors": { "nombre": ["Required"] } }
+  }
+}</code></pre>
+
+  <h3>Reglas generales</h3>
+  <ul>
+    <li><strong>Identificadores:</strong> todos los IDs son UUID. Un ID con formato inválido en la ruta responde <code>400</code>.</li>
+    <li><strong>Campos extra:</strong> los cuerpos de escritura rechazan campos desconocidos (<code>400</code>). El servidor asigna IDs, autor, fechas y totales; no los envíes.</li>
+    <li><strong>Fechas:</strong> formato ISO 8601 con zona horaria, p. ej. <code>2026-10-20T07:00:00-05:00</code>.</li>
+    <li><strong>Listas:</strong> parámetro <code>?limit=</code> (por defecto 50, máximo 100). Algunas listas aceptan <code>?offset=</code>.</li>
+    <li><strong>Actualizaciones (PATCH):</strong> envía solo los campos que quieres cambiar.</li>
+    <li><strong>Límite de peticiones:</strong> 300 cada 15 minutos por IP; 20 cada 15 minutos en login (con contraseña o con Google), registro, refresh, cambio de contraseña y solicitud institucional. Al superarlo recibes <code>429</code>.</li>
+  </ul>
+
+  <h3>Códigos de error frecuentes</h3>
+  <div class="table-wrap"><table>
+    <tr><th>HTTP</th><th>code</th><th>Qué significa</th></tr>
+    <tr><td>400</td><td><code>VALIDATION_ERROR</code></td><td>Faltan campos, tienen un formato incorrecto o sobran campos.</td></tr>
+    <tr><td>400</td><td><code>INVALID_JSON</code></td><td>El cuerpo no es JSON válido.</td></tr>
+    <tr><td>400</td><td><code>INVALID_REFERENCE</code></td><td>Un ID referenciado (prueba, tema, cuestionario…) no existe o no es accesible.</td></tr>
+    <tr><td>401</td><td><code>UNAUTHORIZED</code></td><td>Falta el token, expiró o la cuenta ya no está activa. Usa <code>/auth/refresh</code>.</td></tr>
+    <tr><td>401</td><td><code>INVALID_CREDENTIALS</code></td><td>Correo o contraseña incorrectos, o cuenta sin activar.</td></tr>
+    <tr><td>401</td><td><code>INVALID_GOOGLE_TOKEN</code></td><td>El ID token de Google no es válido, expiró, es de otro cliente o su correo no está verificado.</td></tr>
+    <tr><td>403</td><td><code>ACCOUNT_NOT_ACTIVE</code></td><td>Inicio de sesión con Google de una cuenta que aún no está <code>ACTIVO</code>.</td></tr>
+    <tr><td>403</td><td><code>FORBIDDEN</code></td><td>Tu rol no permite la operación, o el recurso no es tuyo.</td></tr>
+    <tr><td>404</td><td><code>NOT_FOUND</code></td><td>No existe, o no tienes permiso para verlo.</td></tr>
+    <tr><td>409</td><td><code>CONFLICT</code></td><td>Registro duplicado (correo, código, orden repetido…).</td></tr>
+    <tr><td>409</td><td><code>INVALID_STATE</code> / <code>IMMUTABLE_RESOURCE</code></td><td>El recurso no está en un estado que permita el cambio (p. ej. editar un cuestionario ya publicado).</td></tr>
+    <tr><td>422</td><td><code>BUSINESS_RULE</code></td><td>La base de datos rechazó la operación por una regla de negocio.</td></tr>
+    <tr><td>429</td><td><code>RATE_LIMITED</code></td><td>Demasiadas peticiones; espera unos minutos.</td></tr>
+    <tr><td>500</td><td><code>INTERNAL_ERROR</code></td><td>Error inesperado del servidor.</td></tr>
+    <tr><td>503</td><td><code>GOOGLE_NOT_CONFIGURED</code></td><td>El servidor no tiene <code>GOOGLE_CLIENT_ID</code>; el inicio de sesión con Google está deshabilitado.</td></tr>
+  </table></div>
+  <p>Los endpoints documentan además sus códigos específicos (por ejemplo <code>ATTEMPT_EXPIRED</code> o <code>ROLE_MISMATCH</code>).</p>
+</section>
+
+<section id="roles">
+  <h2>Roles y permisos</h2>
+  <div class="table-wrap"><table>
+    <tr><th>Rol</th><th>Puede…</th></tr>
+    <tr><td><code>ADMINISTRADOR</code></td><td>Todo: activar usuarios y asignar roles, catálogos ICFES, instituciones y solicitudes, auditoría.</td></tr>
+    <tr><td><code>GESTOR_INSTITUCIONAL</code></td><td>Con <code>X-Institution-Id</code>: vincular profesores, ver aulas, resultados y progreso de su institución, editar datos de la institución.</td></tr>
+    <tr><td><code>PROFESOR</code></td><td>Crear preguntas, estímulos, plantillas y cuestionarios; crear aulas, invitar estudiantes, asignar cuestionarios y revisar resultados.</td></tr>
+    <tr><td><code>ESTUDIANTE</code></td><td>Unirse a aulas con un código, presentar cuestionarios (libres o asignados) y ver sus resultados.</td></tr>
+  </table></div>
+  <p>En cada endpoint, la etiqueta de la derecha indica qué roles pueden usarlo. «Autenticado» significa cualquier usuario con sesión iniciada.</p>
+</section>
+
+<section id="flujos">
+  <h2>Flujos típicos</h2>
+
+  <h3>Poner en marcha una institución (administrador)</h3>
+  <ol class="flow">
+    <li>Revisa las solicitudes con <code>GET /institution-requests</code> y apruébala con <code>PATCH /institution-requests/:id/review</code> (<code>"estado": "APROBADA"</code>). Esto crea la institución. También puedes crearla directo con <code>POST /institutions</code>.</li>
+    <li>Activa a los usuarios registrados y asígnales rol con <code>PATCH /users/:id</code>.</li>
+    <li>Vincula al gestor con <code>POST /institutions/:id/members</code> (<code>"rol": "GESTOR_INSTITUCIONAL"</code>). El gestor podrá vincular a sus profesores.</li>
+  </ol>
+
+  <h3>Crear y asignar un simulacro (profesor)</h3>
+  <ol class="flow">
+    <li>(Opcional) Registra imágenes con <code>POST /media</code> y textos base con <code>POST /stimuli</code>; publícalos.</li>
+    <li>Crea preguntas con <code>POST /questions</code> (o en lote con <code>POST /questions/import</code>) y publícalas con <code>POST /questions/:versionId/publish</code>.</li>
+    <li>Elige o crea una plantilla (<code>GET/POST /templates</code>) y crea el cuestionario con <code>POST /questionnaires</code>.</li>
+    <li>Agrega sesiones (<code>POST /questionnaires/:id/sessions</code>) e ítems (<code>…/sessions/:sessionId/items</code>) y publícalo con <code>POST /questionnaires/:id/publish</code>.</li>
+    <li>Crea un aula con <code>POST /classrooms</code> (con <code>X-Institution-Id</code>), genera un código con <code>POST /classrooms/:id/invitations</code> y compártelo.</li>
+    <li>Asigna el cuestionario con <code>POST /classrooms/:id/assignments</code> y consulta resultados con <code>GET /classrooms/:id/results</code> y <code>GET /attempts/:id/review</code>.</li>
+  </ol>
+
+  <h3>Presentar un simulacro (estudiante)</h3>
+  <ol class="flow">
+    <li>Únete al aula con <code>POST /classrooms/enroll</code> y el código del profesor.</li>
+    <li>Mira tus asignaciones con <code>GET /classrooms/mine</code>.</li>
+    <li>Inicia el intento con <code>POST /attempts/assignments/:assignmentId</code> y carga las preguntas con <code>GET /attempts/:id</code>.</li>
+    <li>Guarda cada respuesta con <code>PUT /attempts/:id/answers/:itemId</code> (puedes cambiarla mientras el intento esté en progreso).</li>
+    <li>Entrega con <code>POST /attempts/:id/finish</code> y consulta tu puntaje con <code>GET /attempts/:id/result</code>.</li>
+  </ol>
+</section>
+
+<section id="google">
+  <h2>Iniciar sesión con Google</h2>
+  <p>La API acepta el <strong>ID token</strong> que entrega el botón oficial «Iniciar sesión con Google» (Google Identity Services), lo verifica con Google y responde igual que <code>POST /auth/login</code>. El frontend nunca maneja contraseñas de Google.</p>
+
+  <h3>Configuración (una sola vez)</h3>
+  <ol class="flow">
+    <li>En Google Cloud Console → <em>APIs y servicios → Credenciales</em>, crea un <strong>ID de cliente OAuth</strong> de tipo <em>Aplicación web</em>.</li>
+    <li>En <em>Orígenes de JavaScript autorizados</em> agrega la URL del frontend (por ejemplo <code>http://localhost:5173</code> y el dominio de producción). No hace falta URI de redirección.</li>
+    <li>Copia el ID de cliente (<code>…apps.googleusercontent.com</code>) en la variable <code>GOOGLE_CLIENT_ID</code> del servidor y reinícialo. Sin esa variable, <code>POST /auth/google</code> responde <code>503 GOOGLE_NOT_CONFIGURED</code>.</li>
+    <li>Si la base de datos se creó antes de esta función, aplica una vez <code>SQL/migrations/001_perfil_y_google.sql</code>, que agrega las columnas de foto y Google a <code>usuario</code>. Puedes ejecutarlo varias veces sin problema.</li>
+  </ol>
+
+  <h3>El botón en el frontend</h3>
+  <p>Pregunta a <code>GET /auth/providers</code> si Google está habilitado y con qué <code>clientId</code>; así el frontend no necesita tener el ID escrito en el código.</p>
+  <pre><code>&lt;script src="https://accounts.google.com/gsi/client" async&gt;&lt;/script&gt;
+&lt;div id="boton-google"&gt;&lt;/div&gt;
+
+&lt;script type="module"&gt;
+const API = '<span class="base-url">http://localhost:3001</span>/api/v1';
+const { data } = await (await fetch(`${API}/auth/providers`)).json();
+
+if (data.google.habilitado) {
+  google.accounts.id.initialize({
+    client_id: data.google.clientId,
+    callback: async ({ credential }) =&gt; {
+      const res = await fetch(`${API}/auth/google`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ idToken: credential }),
+      });
+      const body = await res.json();
+      if (res.status === 200) guardarSesion(body.data);           // accessToken, refreshToken, user (con fotoPerfilUrl)
+      else if (res.status === 201) avisar('Cuenta creada; un administrador debe activarla.');
+      else avisar(body.error.message);                           // 403 ACCOUNT_NOT_ACTIVE, 401, 409…
+    },
+  });
+  google.accounts.id.renderButton(document.getElementById('boton-google'),
+    { theme: 'outline', size: 'large', text: 'signin_with', locale: 'es' });
+}
+&lt;/script&gt;</code></pre>
+  <p>En React, Vue o Angular el flujo es el mismo: carga el script de Google, renderiza el botón y envía el <code>credential</code> a <code>POST /auth/google</code>. Si el frontend usa una CSP, permite <code>https://accounts.google.com</code> en <code>script-src</code>, <code>frame-src</code> y <code>connect-src</code>.</p>
+
+  <h3>Qué pasa con cada cuenta</h3>
+  <div class="table-wrap"><table>
+    <tr><th>Situación</th><th>Respuesta</th></tr>
+    <tr><td>Correo nunca registrado</td><td><code>201</code>: se crea una cuenta <code>ESTUDIANTE</code> <code>PENDIENTE</code> con la foto de Google. Como en el registro normal, un administrador debe activarla.</td></tr>
+    <tr><td>Cuenta existente con el mismo correo (registrada con contraseña)</td><td>Se vincula a Google automáticamente; luego puede entrar con cualquiera de los dos métodos. Su foto propia se conserva.</td></tr>
+    <tr><td>Cuenta vinculada y <code>ACTIVO</code></td><td><code>200</code> con <code>accessToken</code>, <code>refreshToken</code> y <code>user</code>, igual que el login.</td></tr>
+    <tr><td>Cuenta <code>PENDIENTE</code>, <code>BLOQUEADO</code> o <code>INACTIVO</code></td><td><code>403 ACCOUNT_NOT_ACTIVE</code> con <code>details.estado</code>.</td></tr>
+    <tr><td>El correo ya está vinculado a <em>otra</em> cuenta de Google</td><td><code>409 GOOGLE_ACCOUNT_MISMATCH</code>.</td></tr>
+  </table></div>
+  <div class="note">Las cuentas creadas con Google no tienen contraseña: no pueden usar <code>POST /auth/login</code> ni <code>POST /auth/change-password</code> (<code>409 PASSWORD_NOT_SET</code>). Después del login con Google, el refresh y el logout funcionan igual que siempre.</div>
+</section>
+
+<section id="postman">
+  <h2>Probar con Postman</h2>
+  <p>El repositorio incluye una colección que recorre toda la API con pruebas automáticas en cada petición: registro, sesiones, foto de perfil, Google, institución, catálogos, contenido, cuestionario, aula, intento, calificación y auditoría.</p>
+  <ol class="flow">
+    <li>Importa en Postman <code>postman/PreICFES-Thor.postman_collection.json</code> y el entorno <code>postman/PreICFES-Thor.local.postman_environment.json</code>.</li>
+    <li>En el entorno define <code>baseUrl</code> (por ejemplo <code><span class="base-url">http://localhost:3001</span></code>), y <code>adminEmail</code> y <code>adminPassword</code> de un administrador activo (se crea con <code>npm run create-admin</code>).</li>
+    <li>Ejecuta la colección completa con el <em>Collection Runner</em>, en orden: cada petición guarda en variables los IDs que usan las siguientes.</li>
+  </ol>
+  <pre><code>npx newman run postman/PreICFES-Thor.postman_collection.json \
+  -e postman/PreICFES-Thor.local.postman_environment.json --env-var adminPassword='…'</code></pre>
+  <div class="warn"><strong>Crea datos reales</strong> (usuarios, una institución, preguntas…): úsala en una base de desarrollo, nunca en producción. Cada corrida usa un sufijo propio, así que puede repetirse. Una corrida consume 17 de las 20 peticiones permitidas cada 15 minutos en login y registro: espera entre corridas o levanta la API con <code>NODE_ENV=test</code>, que desactiva ese límite. La petición de Google acepta <code>503</code> si el servidor no tiene <code>GOOGLE_CLIENT_ID</code> y <code>401</code> si lo tiene.</div>
+</section>
+
+<!-- ============================ REFERENCIA ============================ -->
+
+<section id="auth" class="ref">
+  <h2>Autenticación</h2>
+
+  <article class="ep">
+    <div class="ep-head"><span class="m post">POST</span><code>/auth/register</code><span class="roles">Público</span></div>
+    <p>Crea una cuenta en estado <code>PENDIENTE</code> con rol <code>ESTUDIANTE</code>. Un administrador debe activarla.</p>
+    <pre><code>{ "nombres": "Ana", "apellidos": "Pérez", "correo": "ana@correo.com", "contrasena": "minimo-8-caracteres" }</code></pre>
+    <ul><li>Respuesta <code>201</code>: <code>{ id, estado: "PENDIENTE", mensaje }</code>.</li><li><code>409 CONFLICT</code> si el correo ya está registrado.</li></ul>
+  </article>
+
+  <article class="ep">
+    <div class="ep-head"><span class="m post">POST</span><code>/auth/login</code><span class="roles">Público</span></div>
+    <p>Inicia sesión. Solo funciona con cuentas <code>ACTIVO</code>.</p>
+    <pre><code>{ "correo": "ana@correo.com", "contrasena": "minimo-8-caracteres" }</code></pre>
+    <div class="label">Respuesta</div>
+    <pre><code>{ "data": {
+  "accessToken": "eyJ…", "refreshToken": "eyJ…",
+  "user": { "id": "…", "nombres": "Ana", "apellidos": "Pérez", "correo": "ana@correo.com",
+            "fotoPerfilUrl": "https://cdn.ejemplo.com/ana.png", "rol": "ESTUDIANTE" }
+} }</code></pre>
+    <p><code>fotoPerfilUrl</code> es la imagen de perfil del usuario (o <code>null</code> si no tiene). Se carga con <code>PATCH /users/me</code> o se toma de Google la primera vez que entra con Google.</p>
+  </article>
+
+  <article class="ep">
+    <div class="ep-head"><span class="m get">GET</span><code>/auth/providers</code><span class="roles">Público</span></div>
+    <p>Métodos de inicio de sesión disponibles. Úsalo para decidir si mostrar el botón de Google y con qué ID de cliente.</p>
+    <pre><code>{ "data": { "contrasena": true, "google": { "habilitado": true, "clientId": "1234-abc.apps.googleusercontent.com" } } }</code></pre>
+  </article>
+
+  <article class="ep">
+    <div class="ep-head"><span class="m post">POST</span><code>/auth/google</code><span class="roles">Público</span></div>
+    <p>Inicia sesión con el ID token (<code>credential</code>) que entrega el botón de Google. Ver <a href="#google">Iniciar sesión con Google</a>.</p>
+    <pre><code>{ "idToken": "eyJhbGciOiJSUzI1NiIs…" }</code></pre>
+    <ul>
+      <li><code>200</code>: misma respuesta que <code>/auth/login</code>.</li>
+      <li><code>201</code>: <code>{ id, estado: "PENDIENTE", mensaje }</code> si se creó una cuenta nueva (requiere activación).</li>
+      <li><code>401 INVALID_GOOGLE_TOKEN</code>, <code>403 ACCOUNT_NOT_ACTIVE</code>, <code>409 GOOGLE_ACCOUNT_MISMATCH</code>, <code>503 GOOGLE_NOT_CONFIGURED</code>.</li>
+    </ul>
+  </article>
+
+  <article class="ep">
+    <div class="ep-head"><span class="m post">POST</span><code>/auth/refresh</code><span class="roles">Público</span></div>
+    <p>Cambia un refresh token por un par nuevo (misma forma que el login). El refresh token usado queda invalidado.</p>
+    <pre><code>{ "refreshToken": "eyJ…" }</code></pre>
+    <div class="warn"><strong>Importante:</strong> si se reutiliza un refresh token ya usado, la API asume que fue robado y cierra <em>todas</em> las sesiones del usuario. Guarda siempre el último token recibido.</div>
+  </article>
+
+  <article class="ep">
+    <div class="ep-head"><span class="m post">POST</span><code>/auth/logout</code><span class="roles">Público</span></div>
+    <p>Cierra la sesión revocando el refresh token. Responde <code>204</code> sin cuerpo.</p>
+    <pre><code>{ "refreshToken": "eyJ…" }</code></pre>
+  </article>
+
+  <article class="ep">
+    <div class="ep-head"><span class="m get">GET</span><code>/auth/me</code><span class="roles">Autenticado</span></div>
+    <p>Devuelve el usuario actual: <code>id, nombres, apellidos, correo, fotoPerfilUrl, rol</code>, y si envías <code>X-Institution-Id</code> válido, también <code>rolInstitucional</code> e <code>idInstitucion</code>.</p>
+  </article>
+
+  <article class="ep">
+    <div class="ep-head"><span class="m post">POST</span><code>/auth/change-password</code><span class="roles">Autenticado</span></div>
+    <p>Cambia la contraseña. Cierra todas las sesiones de refresco (habrá que volver a iniciar sesión en otros dispositivos). Responde <code>204</code>.</p>
+    <pre><code>{ "contrasenaActual": "clave-vieja", "contrasenaNueva": "clave-nueva-segura" }</code></pre>
+    <ul><li><code>409 PASSWORD_NOT_SET</code> si la cuenta se creó con Google y no tiene contraseña.</li></ul>
+  </article>
+</section>
+
+<section id="usuarios" class="ref">
+  <h2>Usuarios</h2>
+
+  <article class="ep">
+    <div class="ep-head"><span class="m get">GET</span><code>/users/me/institutions</code><span class="roles">Autenticado</span></div>
+    <p>Instituciones a las que estás vinculado, con tu rol en cada una y el estado de la vinculación. Úsalo para obtener el valor de <code>X-Institution-Id</code>.</p>
+  </article>
+
+  <article class="ep">
+    <div class="ep-head"><span class="m patch">PATCH</span><code>/users/me</code><span class="roles">Autenticado</span></div>
+    <p>Actualiza tu propio perfil: nombre y foto. Envía uno o más campos. La foto es una URL <code>http(s)</code> (por ejemplo la <code>url</code> de un recurso registrado con <code>POST /media</code>); <code>null</code> la quita.</p>
+    <pre><code>{ "nombres": "Ana María", "fotoPerfilUrl": "https://cdn.ejemplo.com/ana.png" }</code></pre>
+    <ul><li>Respuesta <code>200</code>: tu usuario actualizado, con <code>fotoPerfilUrl</code> y <code>vinculadoGoogle</code>.</li><li>El rol y el estado no se cambian aquí; eso lo hace un administrador.</li></ul>
+  </article>
+
+  <article class="ep">
+    <div class="ep-head"><span class="m get">GET</span><code>/users</code><span class="roles">Administrador</span></div>
+    <p>Lista de usuarios. Filtros opcionales: <code>?q=</code> (nombre o correo), <code>?estado=PENDIENTE|ACTIVO|BLOQUEADO|INACTIVO</code>, <code>?rol=</code>, <code>?limit=</code>, <code>?offset=</code>.</p>
+  </article>
+
+  <article class="ep">
+    <div class="ep-head"><span class="m get">GET</span><code>/users/:id</code><span class="roles">Administrador</span></div>
+    <p>Detalle de un usuario (con <code>fotoPerfilUrl</code> y <code>vinculadoGoogle</code>), incluyendo sus vinculaciones institucionales.</p>
+  </article>
+
+  <article class="ep">
+    <div class="ep-head"><span class="m patch">PATCH</span><code>/users/:id</code><span class="roles">Administrador</span></div>
+    <p>Activa, bloquea o cambia el rol de una cuenta. Envía uno o más campos.</p>
+    <pre><code>{ "estado": "ACTIVO", "rol": "PROFESOR", "correoVerificado": true }</code></pre>
+    <ul>
+      <li>Roles: <code>ADMINISTRADOR</code>, <code>GESTOR_INSTITUCIONAL</code>, <code>PROFESOR</code>, <code>ESTUDIANTE</code>.</li>
+      <li>Desactivar o cambiar el rol cierra las sesiones del usuario.</li>
+      <li><code>409 SELF_LOCKOUT</code>: no puedes desactivarte ni quitarte el rol de administrador.</li>
+    </ul>
+  </article>
+</section>
+
+<section id="catalogos" class="ref">
+  <h2>Catálogos ICFES</h2>
+  <p>Datos de referencia para clasificar preguntas. Siguen la estructura del ICFES:</p>
+  <ul>
+    <li><strong>Prueba</strong> → competencia → afirmación → evidencia → <strong>tarea</strong> (se asocia a la pregunta con <code>tareaId</code>).</li>
+    <li><strong>Prueba</strong> → componente → <strong>tema</strong> (se asocian a la pregunta con <code>temas</code>).</li>
+  </ul>
+
+  <article class="ep">
+    <div class="ep-head"><span class="m get">GET</span><code>/catalogs</code><span class="roles">Público</span></div>
+    <p>Devuelve en una sola llamada las listas base: <code>pruebas</code>, <code>tiposPregunta</code>, <code>dificultades</code>, <code>modalidades</code> y <code>servicios</code>. Aquí obtienes los IDs para crear preguntas y plantillas.</p>
+  </article>
+
+  <article class="ep">
+    <div class="ep-head"><span class="m get">GET</span><code>/catalogs/{nivelPadre}/:id/{nivel}</code><span class="roles">Público</span></div>
+    <p>Hijos de un elemento del catálogo. Solo activos; agrega <code>?incluirInactivos=true</code> para ver todos. Rutas disponibles:</p>
+    <ul>
+      <li><code>/catalogs/pruebas/:id/competencias</code></li>
+      <li><code>/catalogs/competencias/:id/afirmaciones</code></li>
+      <li><code>/catalogs/afirmaciones/:id/evidencias</code></li>
+      <li><code>/catalogs/evidencias/:id/tareas</code></li>
+      <li><code>/catalogs/pruebas/:id/componentes</code></li>
+      <li><code>/catalogs/componentes/:id/temas</code></li>
+    </ul>
+  </article>
+
+  <article class="ep">
+    <div class="ep-head"><span class="m post">POST</span><code>/catalogs/{nivelPadre}/:id/{nivel}</code><span class="roles">Administrador</span></div>
+    <p>Crea un elemento bajo su padre (mismas rutas que el GET). Campos según el nivel:</p>
+    <div class="table-wrap"><table>
+      <tr><th>Nivel</th><th>Cuerpo</th></tr>
+      <tr><td>competencias</td><td><code>{ "codigo", "nombre", "descripcion"? }</code></td></tr>
+      <tr><td>afirmaciones, evidencias, tareas</td><td><code>{ "codigo", "descripcion" }</code></td></tr>
+      <tr><td>componentes, temas</td><td><code>{ "nombre", "descripcion"? }</code></td></tr>
+    </table></div>
+    <pre><code>POST /catalogs/pruebas/08286be2-3c42-4891-b0b4-66242f37e46a/componentes
+{ "nombre": "Álgebra y cálculo" }</code></pre>
+  </article>
+
+  <article class="ep">
+    <div class="ep-head"><span class="m patch">PATCH</span><code>/catalogs/{nivel}/:id</code><span class="roles">Administrador</span></div>
+    <p>Edita o desactiva un elemento: <code>/catalogs/competencias/:id</code>, <code>/afirmaciones/:id</code>, <code>/evidencias/:id</code>, <code>/tareas/:id</code>, <code>/componentes/:id</code>, <code>/temas/:id</code>. Acepta los mismos campos del POST más <code>"activo": false</code>.</p>
+  </article>
+</section>
+
+<section id="solicitudes" class="ref">
+  <h2>Solicitudes institucionales</h2>
+  <p>Formulario público para que un colegio pida acceso a la plataforma.</p>
+
+  <article class="ep">
+    <div class="ep-head"><span class="m post">POST</span><code>/institution-requests</code><span class="roles">Público</span></div>
+    <pre><code>{
+  "nombreInstitucion": "Colegio San José",
+  "nombreResponsable": "María Gómez",
+  "cargo": "Rectora",
+  "correoInstitucional": "rectoria@sanjose.edu.co",
+  "telefono": "3001234567",
+  "ciudad": "Montería",
+  "rangoEstudiantes": "100-500",
+  "mensaje": "Queremos usar los simulacros con grado 11.",
+  "aceptaPoliticaDatos": true,
+  "servicios": ["a0000000-0000-4000-8000-000000000002"]
+}</code></pre>
+    <ul><li><code>aceptaPoliticaDatos</code> debe ser <code>true</code>. Los IDs de <code>servicios</code> salen de <code>GET /catalogs</code>.</li><li>Respuesta <code>201</code>: <code>{ id, estado: "PENDIENTE", fechaCreacion }</code>.</li></ul>
+  </article>
+
+  <article class="ep">
+    <div class="ep-head"><span class="m get">GET</span><code>/institution-requests</code><span class="roles">Administrador</span></div>
+    <p>Lista de solicitudes, filtrable con <code>?estado=PENDIENTE|EN_REVISION|CONTACTADA|APROBADA|RECHAZADA</code>.</p>
+  </article>
+
+  <article class="ep">
+    <div class="ep-head"><span class="m get">GET</span><code>/institution-requests/:id</code><span class="roles">Administrador</span></div>
+    <p>Detalle de una solicitud, incluidos los servicios pedidos y las notas internas.</p>
+  </article>
+
+  <article class="ep">
+    <div class="ep-head"><span class="m patch">PATCH</span><code>/institution-requests/:id/review</code><span class="roles">Administrador</span></div>
+    <p>Cambia el estado de la solicitud. Al <strong>aprobarla</strong> se crea la institución automáticamente y su ID vuelve en <code>institucionId</code>.</p>
+    <pre><code>{ "estado": "APROBADA", "notasInternas": "Llamada realizada el lunes" }</code></pre>
+    <ul><li>Estados: <code>EN_REVISION</code>, <code>CONTACTADA</code>, <code>RECHAZADA</code>, <code>APROBADA</code>.</li><li><code>409 INVALID_STATE</code>: una solicitud aprobada ya no puede cambiar de estado.</li></ul>
+  </article>
+</section>
+
+<section id="instituciones" class="ref">
+  <h2>Instituciones</h2>
+
+  <article class="ep">
+    <div class="ep-head"><span class="m get">GET</span><code>/institutions</code><span class="roles">Autenticado</span></div>
+    <p>Instituciones donde tienes vinculación activa (el administrador ve todas).</p>
+  </article>
+
+  <article class="ep">
+    <div class="ep-head"><span class="m post">POST</span><code>/institutions</code><span class="roles">Administrador</span></div>
+    <p>Crea una institución directamente, sin solicitud previa.</p>
+    <pre><code>{ "nombre": "Colegio San José", "nit": "900123456-7", "correo": "info@sanjose.edu.co",
+  "telefono": "6047000000", "direccion": "Calle 1 # 2-3", "ciudad": "Montería", "logoUrl": "https://…/logo.png" }</code></pre>
+    <p>Solo <code>nombre</code> es obligatorio.</p>
+  </article>
+
+  <article class="ep">
+    <div class="ep-head"><span class="m get">GET</span><code>/institutions/:id</code><span class="roles">Miembro activo · Administrador</span></div>
+    <p>Datos de la institución y tu rol en ella.</p>
+  </article>
+
+  <article class="ep">
+    <div class="ep-head"><span class="m patch">PATCH</span><code>/institutions/:id</code><span class="roles">Administrador · Gestor de la institución</span></div>
+    <p>Actualiza datos (mismos campos que el POST). Enviar un campo como <code>null</code> lo vacía. Solo el administrador puede cambiar <code>"estado": "ACTIVA|INACTIVA|BLOQUEADA"</code>. El gestor debe enviar <code>X-Institution-Id</code>.</p>
+  </article>
+
+  <article class="ep">
+    <div class="ep-head"><span class="m get">GET</span><code>/institutions/:id/progress</code><span class="roles">Miembro activo · Administrador</span></div>
+    <p>Resumen por aula: estudiantes evaluados, intentos finalizados, promedio (%) y fecha del último intento. Administrador y gestor ven todas las aulas; un profesor solo las suyas.</p>
+  </article>
+
+  <article class="ep">
+    <div class="ep-head"><span class="m get">GET</span><code>/institutions/:id/members</code><span class="roles">Administrador · Gestor</span></div>
+    <p>Profesores y gestores vinculados, con el estado de su vinculación.</p>
+  </article>
+
+  <article class="ep">
+    <div class="ep-head"><span class="m post">POST</span><code>/institutions/:id/members</code><span class="roles">Administrador · Gestor</span></div>
+    <p>Vincula a un usuario existente (o reactiva su vinculación) usando su correo.</p>
+    <pre><code>{ "correo": "profe@colegio.edu.co", "rol": "PROFESOR" }</code></pre>
+    <ul>
+      <li>El usuario ya debe tener ese rol global (lo asigna un administrador). Si no, responde <code>400 ROLE_MISMATCH</code>.</li>
+      <li>Un gestor solo puede vincular <code>PROFESOR</code>; los gestores los vincula el administrador.</li>
+      <li><code>404 USER_NOT_FOUND</code> si no existe una cuenta con ese correo.</li>
+    </ul>
+  </article>
+
+  <article class="ep">
+    <div class="ep-head"><span class="m patch">PATCH</span><code>/institutions/:id/members/:memberId</code><span class="roles">Administrador · Gestor</span></div>
+    <p>Cambia el estado de una vinculación. <code>memberId</code> es el <code>id</code> que devuelve la lista de miembros.</p>
+    <pre><code>{ "estado": "RETIRADA" }</code></pre>
+    <p>Estados: <code>ACTIVA</code>, <code>INACTIVA</code>, <code>RETIRADA</code>. Un gestor solo puede modificar profesores.</p>
+  </article>
+</section>
+
+<section id="media" class="ref">
+  <h2>Recursos multimedia y fuentes</h2>
+  <p>La API guarda solo los <strong>metadatos</strong> del archivo; el archivo debe estar subido en un almacenamiento externo que proporcione la URL.</p>
+
+  <article class="ep">
+    <div class="ep-head"><span class="m get">GET</span><code>/media</code><span class="roles">Administrador · Profesor</span></div>
+    <p>Tus recursos (el administrador ve todos). Filtro opcional <code>?tipo=IMAGEN|AUDIO|VIDEO|DOCUMENTO</code>.</p>
+  </article>
+
+  <article class="ep">
+    <div class="ep-head"><span class="m post">POST</span><code>/media</code><span class="roles">Administrador · Profesor</span></div>
+    <pre><code>{ "tipo": "IMAGEN", "url": "https://cdn.ejemplo.com/grafica.png", "nombreArchivo": "grafica.png",
+  "mimeType": "image/png", "textoAlternativo": "Gráfica de barras de ventas", "tamanoBytes": 48213 }</code></pre>
+    <p>El <code>mimeType</code> debe corresponder al tipo (<code>image/*</code>, <code>audio/*</code>, <code>video/*</code>, o <code>application/*</code>/<code>text/*</code> para documentos). Usa el <code>id</code> devuelto en <code>recursos</code> de preguntas y estímulos.</p>
+  </article>
+
+  <article class="ep">
+    <div class="ep-head"><span class="m get">GET</span><code>/media/:id</code><span class="roles">Administrador · Profesor</span></div>
+    <p>Detalle de un recurso propio.</p>
+  </article>
+
+  <article class="ep">
+    <div class="ep-head"><span class="m delete">DELETE</span><code>/media/:id</code><span class="roles">Administrador · Profesor</span></div>
+    <p>Elimina un recurso propio. Si está en uso en alguna pregunta, estímulo u opción responde <code>409 RESOURCE_IN_USE</code>.</p>
+  </article>
+
+  <article class="ep">
+    <div class="ep-head"><span class="m get">GET</span><code>/media/sources</code><span class="roles">Administrador · Profesor</span></div>
+    <p>Fuentes de contenido (de dónde sale una pregunta o texto). Búsqueda con <code>?q=</code>.</p>
+  </article>
+
+  <article class="ep">
+    <div class="ep-head"><span class="m post">POST</span><code>/media/sources</code><span class="roles">Administrador · Profesor</span></div>
+    <pre><code>{ "nombre": "Cuadernillo ICFES 2023", "tipo": "ICFES", "referencia": "Saber 11, sesión 1", "anio": 2023 }</code></pre>
+    <p>Tipos: <code>PROPIA</code>, <code>ICFES</code>, <code>LIBRO</code>, <code>OTRO</code>. El <code>id</code> se usa como <code>fuenteId</code>.</p>
+  </article>
+</section>
+
+<section id="estimulos" class="ref">
+  <h2>Estímulos</h2>
+  <p>Un estímulo es el material de contexto que comparten varias preguntas: un texto de lectura, una tabla, una situación. Tiene <strong>versiones</strong>; cada versión pasa por <code>BORRADOR → PUBLICADA → ARCHIVADA</code>.</p>
+  <div class="note">Las rutas con <code>:id</code> usan el <strong>ID de la versión</strong>, excepto <code>POST /stimuli/:id/versions</code>, que usa el <strong>ID del estímulo</strong> (<code>estimuloId</code>).</div>
+
+  <article class="ep">
+    <div class="ep-head"><span class="m get">GET</span><code>/stimuli</code><span class="roles">Administrador · Profesor · Gestor</span></div>
+    <p>Lista versiones publicadas y las tuyas. Filtros: <code>?q=</code> (título o código), <code>?estado=</code>.</p>
+  </article>
+
+  <article class="ep">
+    <div class="ep-head"><span class="m post">POST</span><code>/stimuli</code><span class="roles">Administrador · Profesor</span></div>
+    <p>Crea el estímulo con su versión 1 en borrador.</p>
+    <pre><code>{ "titulo": "El viaje en tren", "contenido": "Un tren sale de Bogotá a las 8:00…",
+  "fuenteId": null, "recursos": ["id-de-recurso"], "codigo": "LC-TREN-01" }</code></pre>
+    <p>Solo <code>contenido</code> es obligatorio. Respuesta: <code>{ estimuloId, id (versión), version: 1, estado: "BORRADOR" }</code>.</p>
+  </article>
+
+  <article class="ep">
+    <div class="ep-head"><span class="m get">GET</span><code>/stimuli/:id</code><span class="roles">Administrador · Profesor · Gestor</span></div>
+    <p>Detalle de una versión con sus recursos.</p>
+  </article>
+
+  <article class="ep">
+    <div class="ep-head"><span class="m post">POST</span><code>/stimuli/:id/versions</code><span class="roles">Autor · Administrador</span></div>
+    <p>Crea una nueva versión (<code>:id</code> = estimuloId). Mismo cuerpo que la creación, sin <code>codigo</code>.</p>
+  </article>
+
+  <article class="ep">
+    <div class="ep-head"><span class="m post">POST</span><code>/stimuli/:id/publish</code><span class="roles">Autor · Administrador</span></div>
+    <p>Publica una versión en borrador. Una pregunta con estímulo no se puede publicar mientras su estímulo siga en borrador.</p>
+  </article>
+
+  <article class="ep">
+    <div class="ep-head"><span class="m post">POST</span><code>/stimuli/:id/archive</code><span class="roles">Autor · Administrador</span></div>
+    <p>Archiva una versión (deja de poder usarse en preguntas nuevas).</p>
+  </article>
+</section>
+
+<section id="preguntas" class="ref">
+  <h2>Preguntas</h2>
+  <p>Las preguntas también son <strong>versionadas</strong>: <code>preguntaId</code> identifica la pregunta y <code>versionId</code> (o <code>id</code>) cada versión. Editar una pregunta = crear una versión nueva.</p>
+  <div class="note">Las rutas con <code>:id</code> usan el <strong>ID de la versión</strong>, excepto <code>POST /questions/:id/versions</code>, que usa el <strong>preguntaId</strong>.</div>
+
+  <article class="ep">
+    <div class="ep-head"><span class="m get">GET</span><code>/questions</code><span class="roles">Administrador · Profesor · Gestor</span></div>
+    <p>Banco de preguntas: publicadas y las tuyas. La clave de respuesta solo aparece en tus preguntas (o para el administrador).</p>
+    <p>Filtros: <code>?q=</code> (texto o código), <code>?estado=BORRADOR|PUBLICADA|ARCHIVADA</code>, <code>?preguntaId=</code> (todas las versiones de una pregunta), <code>?temaId=</code>, <code>?tareaId=</code>, <code>?dificultadId=</code>.</p>
+  </article>
+
+  <article class="ep">
+    <div class="ep-head"><span class="m post">POST</span><code>/questions</code><span class="roles">Administrador · Profesor</span></div>
+    <p>Crea una pregunta de selección múltiple (versión 1, en borrador).</p>
+    <pre><code>{
+  "tipoPreguntaId": "e4a31494-6cf6-4fd4-ba73-3d119422e7bd",
+  "dificultadId": "32fef90d-be8c-4f79-9daa-91e3b1d1af94",
+  "enunciado": "¿A qué hora llega el tren si viaja 3 horas?",
+  "opciones": [
+    { "letra": "A", "contenido": "10:00", "orden": 1 },
+    { "letra": "B", "contenido": "11:00", "orden": 2 },
+    { "letra": "C", "contenido": "12:00", "orden": 3 },
+    { "letra": "D", "contenido": "13:00", "orden": 4 }
+  ],
+  "respuestaCorrecta": "B",
+  "explicacion": "Sale a las 8:00 y suma 3 horas.",
+  "justificacion": "Operación con horas",
+  "estimuloVersionId": "id-version-estimulo",
+  "tareaId": null,
+  "fuenteId": null,
+  "temas": ["id-tema"],
+  "recursos": ["id-recurso"]
+}</code></pre>
+    <ul>
+      <li>Obligatorios: <code>tipoPreguntaId</code>, <code>dificultadId</code>, <code>enunciado</code>, <code>opciones</code> (2 a 10, letras y orden únicos) y <code>respuestaCorrecta</code> (una de las letras).</li>
+      <li>Respuesta <code>201</code>: <code>{ preguntaId, versionId, version: 1, estado: "BORRADOR" }</code>.</li>
+    </ul>
+  </article>
+
+  <article class="ep">
+    <div class="ep-head"><span class="m get">GET</span><code>/questions/:id</code><span class="roles">Administrador · Profesor · Gestor</span></div>
+    <p>Detalle completo de una versión: opciones, estímulo, temas, tarea, recursos y, si eres el autor, la <code>clave</code>.</p>
+  </article>
+
+  <article class="ep">
+    <div class="ep-head"><span class="m post">POST</span><code>/questions/:id/versions</code><span class="roles">Autor · Administrador</span></div>
+    <p>Crea una nueva versión en borrador (<code>:id</code> = preguntaId). Mismo cuerpo que <code>POST /questions</code>.</p>
+  </article>
+
+  <article class="ep">
+    <div class="ep-head"><span class="m post">POST</span><code>/questions/:id/publish</code><span class="roles">Autor · Administrador</span></div>
+    <p>Publica una versión en borrador. Requiere clave de respuesta, al menos 2 opciones y, si tiene estímulo, que esté publicado. Al publicar, la versión publicada anterior de la misma pregunta se <strong>archiva</strong> (los cuestionarios ya publicados conservan la versión que usan).</p>
+    <p><code>400 QUESTION_INCOMPLETE</code> si no cumple los requisitos o no está en borrador.</p>
+  </article>
+
+  <article class="ep">
+    <div class="ep-head"><span class="m post">POST</span><code>/questions/:id/archive</code><span class="roles">Autor · Administrador</span></div>
+    <p>Archiva una versión. Una versión archivada no se puede agregar a cuestionarios nuevos.</p>
+  </article>
+
+  <article class="ep">
+    <div class="ep-head"><span class="m post">POST</span><code>/questions/import</code><span class="roles">Administrador · Profesor</span></div>
+    <p>Importa hasta 200 preguntas de una vez. Cada elemento de <code>preguntas</code> tiene el mismo formato que <code>POST /questions</code>. Las filas válidas se crean en borrador; las inválidas se registran con su error sin detener el lote.</p>
+    <pre><code>{ "nombreArchivo": "banco-matematicas.xlsx", "archivoUrl": null, "preguntas": [ { …pregunta… }, { …pregunta… } ] }</code></pre>
+    <div class="label">Respuesta</div>
+    <pre><code>{ "data": { "id": "id-lote", "estado": "COMPLETADA_CON_ERRORES",
+  "totalFilas": 3, "filasExitosas": 2, "filasFallidas": 1,
+  "preguntas": [ { "fila": 1, "preguntaId": "…", "versionId": "…" } ] } }</code></pre>
+    <p>Estados posibles: <code>COMPLETADA</code>, <code>COMPLETADA_CON_ERRORES</code>, <code>FALLIDA</code>.</p>
+  </article>
+
+  <article class="ep">
+    <div class="ep-head"><span class="m get">GET</span><code>/questions/imports</code><span class="roles">Administrador · Profesor</span></div>
+    <p>Historial de tus importaciones.</p>
+  </article>
+
+  <article class="ep">
+    <div class="ep-head"><span class="m get">GET</span><code>/questions/imports/:id</code><span class="roles">Administrador · Profesor</span></div>
+    <p>Detalle de un lote con la lista de <code>errores</code>: número de <code>fila</code>, <code>columna</code> (campo), <code>codigo</code> y <code>mensaje</code>.</p>
+  </article>
+</section>
+
+<section id="plantillas" class="ref">
+  <h2>Plantillas de evaluación</h2>
+  <p>Una plantilla define la estructura de un examen: modalidad (<code>RAPIDO</code> o <code>REAL</code>) y sesiones con pruebas, cantidad de preguntas y duración. Los cuestionarios se crean a partir de una plantilla.</p>
+
+  <article class="ep">
+    <div class="ep-head"><span class="m get">GET</span><code>/templates/modalities</code><span class="roles">Autenticado</span></div>
+    <p>Modalidades activas.</p>
+  </article>
+
+  <article class="ep">
+    <div class="ep-head"><span class="m get">GET</span><code>/templates</code><span class="roles">Autenticado</span></div>
+    <p>Plantillas oficiales activas y las tuyas, con sus sesiones.</p>
+  </article>
+
+  <article class="ep">
+    <div class="ep-head"><span class="m get">GET</span><code>/templates/:id</code><span class="roles">Autenticado</span></div>
+    <p>Detalle de una plantilla.</p>
+  </article>
+
+  <article class="ep">
+    <div class="ep-head"><span class="m post">POST</span><code>/templates</code><span class="roles">Administrador · Profesor</span></div>
+    <pre><code>{
+  "modalidadId": "1b1fa3a5-d29e-403f-a17a-7fff17d4f378",
+  "nombre": "Simulacro corto de matemáticas",
+  "descripcion": "20 preguntas en 45 minutos",
+  "sesiones": [
+    { "pruebaId": "08286be2-3c42-4891-b0b4-66242f37e46a", "numeroSesion": 1,
+      "cantidadPreguntas": 20, "duracionMinutos": 45, "orden": 1 }
+  ]
+}</code></pre>
+    <p>Solo el administrador puede enviar <code>"oficial": true</code>. El par nombre + versión debe ser único.</p>
+  </article>
+
+  <article class="ep">
+    <div class="ep-head"><span class="m patch">PATCH</span><code>/templates/:id</code><span class="roles">Autor · Administrador</span></div>
+    <p>Edita <code>nombre</code>, <code>descripcion</code> o la desactiva con <code>"activa": false</code>. <code>oficial</code> solo lo cambia el administrador.</p>
+  </article>
+</section>
+
+<section id="cuestionarios" class="ref">
+  <h2>Cuestionarios</h2>
+  <p>El examen concreto: sesiones con preguntas publicadas. Ciclo de vida: <code>BORRADOR</code> (editable) → <code>PUBLICADO</code> (se puede presentar y asignar, ya no se edita) → <code>ARCHIVADO</code>.</p>
+
+  <article class="ep">
+    <div class="ep-head"><span class="m get">GET</span><code>/questionnaires</code><span class="roles">Autenticado</span></div>
+    <p>Cuestionarios publicados y los tuyos, con total de sesiones y preguntas. Los estudiantes lo usan para elegir un cuestionario de práctica libre.</p>
+  </article>
+
+  <article class="ep">
+    <div class="ep-head"><span class="m post">POST</span><code>/questionnaires</code><span class="roles">Administrador · Profesor</span></div>
+    <pre><code>{ "plantillaId": "id-plantilla", "nombre": "Simulacro 1 - Grado 11" }</code></pre>
+  </article>
+
+  <article class="ep">
+    <div class="ep-head"><span class="m get">GET</span><code>/questionnaires/:id</code><span class="roles">Autenticado</span></div>
+    <p>Estructura completa: sesiones e ítems con enunciado, opciones, estímulo y recursos. Nunca incluye la respuesta correcta.</p>
+  </article>
+
+  <article class="ep">
+    <div class="ep-head"><span class="m patch">PATCH</span><code>/questionnaires/:id</code><span class="roles">Autor · Administrador</span></div>
+    <p>Renombra (solo en borrador) o archiva. Archivar cierra las asignaciones pendientes o abiertas que lo usan.</p>
+    <pre><code>{ "nombre": "Simulacro 1 (corregido)" }    o    { "estado": "ARCHIVADO" }</code></pre>
+  </article>
+
+  <article class="ep">
+    <div class="ep-head"><span class="m post">POST</span><code>/questionnaires/:id/sessions</code><span class="roles">Autor · Administrador</span></div>
+    <p>Agrega una sesión (solo en borrador). La suma de <code>duracionMinutos</code> de las sesiones define el tiempo límite de los intentos.</p>
+    <pre><code>{ "numeroSesion": 1, "nombre": "Sesión 1 - Matemáticas", "duracionMinutos": 45, "orden": 1 }</code></pre>
+  </article>
+
+  <article class="ep">
+    <div class="ep-head"><span class="m delete">DELETE</span><code>/questionnaires/:id/sessions/:sessionId</code><span class="roles">Autor · Administrador</span></div>
+    <p>Elimina una sesión y sus ítems (solo en borrador). Responde <code>204</code>.</p>
+  </article>
+
+  <article class="ep">
+    <div class="ep-head"><span class="m post">POST</span><code>/questionnaires/:id/sessions/:sessionId/items</code><span class="roles">Autor · Administrador</span></div>
+    <p>Agrega una pregunta <strong>publicada</strong> a la sesión. <code>valor</code> es opcional (por defecto 1).</p>
+    <pre><code>{ "versionPreguntaId": "id-version-pregunta", "orden": 1, "valor": 1 }</code></pre>
+    <p><code>400 INVALID_ITEM</code> si la pregunta no está publicada o la sesión no pertenece al cuestionario; <code>409</code> si la pregunta u orden ya está en la sesión.</p>
+  </article>
+
+  <article class="ep">
+    <div class="ep-head"><span class="m delete">DELETE</span><code>/questionnaires/:id/sessions/:sessionId/items/:itemId</code><span class="roles">Autor · Administrador</span></div>
+    <p>Quita un ítem (solo en borrador). Responde <code>204</code>.</p>
+  </article>
+
+  <article class="ep">
+    <div class="ep-head"><span class="m post">POST</span><code>/questionnaires/:id/publish</code><span class="roles">Autor · Administrador</span></div>
+    <p>Publica el cuestionario. Requiere al menos una sesión con ítems y que todas sus preguntas estén publicadas. <code>400 QUESTIONNAIRE_INCOMPLETE</code> si no cumple.</p>
+  </article>
+</section>
+
+<section id="aulas" class="ref">
+  <h2>Aulas</h2>
+  <p>Un aula agrupa a un profesor con sus estudiantes dentro de una institución. Los estudiantes entran con un código de invitación y el profesor les asigna cuestionarios con fechas.</p>
+
+  <h3>Para profesores, gestores y administradores</h3>
+
+  <article class="ep">
+    <div class="ep-head"><span class="m get">GET</span><code>/classrooms</code><span class="roles">Administrador · Gestor · Profesor</span></div>
+    <p>El profesor ve sus aulas; el gestor (con <code>X-Institution-Id</code>) las de su institución; el administrador todas (<code>?institucionId=</code> para filtrar). Filtro <code>?estado=ACTIVA|ARCHIVADA|INACTIVA</code>.</p>
+  </article>
+
+  <article class="ep">
+    <div class="ep-head"><span class="m post">POST</span><code>/classrooms</code><span class="roles">Profesor</span></div>
+    <p>Crea un aula en la institución indicada en <code>X-Institution-Id</code> (debes estar vinculado como profesor).</p>
+    <pre><code>{ "nombre": "11A - Matemáticas", "descripcion": "Jornada mañana" }</code></pre>
+    <p><code>400 INSTITUTION_REQUIRED</code> si falta la cabecera o no tienes vinculación activa.</p>
+  </article>
+
+  <article class="ep">
+    <div class="ep-head"><span class="m get">GET</span><code>/classrooms/:id</code><span class="roles">Administrador · Gestor · Profesor del aula</span></div>
+    <p>Detalle del aula con número de estudiantes activos.</p>
+  </article>
+
+  <article class="ep">
+    <div class="ep-head"><span class="m patch">PATCH</span><code>/classrooms/:id</code><span class="roles">Administrador · Gestor · Profesor del aula</span></div>
+    <pre><code>{ "nombre": "11A", "descripcion": null, "estado": "ARCHIVADA" }</code></pre>
+  </article>
+
+  <article class="ep">
+    <div class="ep-head"><span class="m get">GET</span><code>/classrooms/:id/students</code><span class="roles">Administrador · Gestor · Profesor del aula</span></div>
+    <p>Estudiantes matriculados. Cada elemento trae su <code>id</code> de matrícula (<code>enrollmentId</code>).</p>
+  </article>
+
+  <article class="ep">
+    <div class="ep-head"><span class="m patch">PATCH</span><code>/classrooms/:id/students/:enrollmentId</code><span class="roles">Administrador · Gestor · Profesor del aula</span></div>
+    <p>Retira, bloquea o reactiva a un estudiante del aula.</p>
+    <pre><code>{ "estado": "RETIRADA" }</code></pre>
+    <p>Estados: <code>ACTIVA</code>, <code>RETIRADA</code>, <code>BLOQUEADA</code>.</p>
+  </article>
+
+  <article class="ep">
+    <div class="ep-head"><span class="m get">GET</span><code>/classrooms/:id/invitations</code><span class="roles">Administrador · Gestor · Profesor del aula</span></div>
+    <p>Códigos de invitación del aula con usos realizados.</p>
+  </article>
+
+  <article class="ep">
+    <div class="ep-head"><span class="m post">POST</span><code>/classrooms/:id/invitations</code><span class="roles">Administrador · Gestor · Profesor del aula</span></div>
+    <p>Genera un código para que los estudiantes se unan. Todos los campos son opcionales; si no envías <code>codigo</code>, se genera uno aleatorio de 10 caracteres.</p>
+    <pre><code>{ "codigo": "MATE11A-2026", "fechaExpiracion": "2026-12-01T23:59:00-05:00", "usosMaximos": 40 }</code></pre>
+  </article>
+
+  <article class="ep">
+    <div class="ep-head"><span class="m patch">PATCH</span><code>/classrooms/:id/invitations/:invitationId</code><span class="roles">Administrador · Gestor · Profesor del aula</span></div>
+    <p>Activa o desactiva un código.</p>
+    <pre><code>{ "activa": false }</code></pre>
+  </article>
+
+  <article class="ep">
+    <div class="ep-head"><span class="m post">POST</span><code>/classrooms/:id/assignments</code><span class="roles">Profesor del aula</span></div>
+    <p>Asigna un cuestionario <strong>publicado</strong> al aula con una ventana de tiempo.</p>
+    <pre><code>{ "cuestionarioId": "id-cuestionario", "fechaApertura": "2026-10-20T07:00:00-05:00",
+  "fechaCierre": "2026-10-20T12:00:00-05:00", "intentosPermitidos": 1 }</code></pre>
+    <p><code>fechaCierre</code> es opcional (sin cierre) y debe ser posterior a la apertura. <code>intentosPermitidos</code>: 1 a 20 (por defecto 1).</p>
+  </article>
+
+  <article class="ep">
+    <div class="ep-head"><span class="m get">GET</span><code>/classrooms/:id/assignments</code><span class="roles">Administrador · Gestor · Profesor del aula</span></div>
+    <p>Asignaciones del aula. El campo <code>estado</code> se calcula según las fechas: <code>PROGRAMADA</code> (aún no abre), <code>ABIERTA</code>, <code>CERRADA</code> o <code>CANCELADA</code>. Incluye cuántos estudiantes ya iniciaron un intento.</p>
+  </article>
+
+  <article class="ep">
+    <div class="ep-head"><span class="m patch">PATCH</span><code>/classrooms/:id/assignments/:assignmentId</code><span class="roles">Profesor del aula</span></div>
+    <p>Amplía o adelanta el cierre, cambia los intentos permitidos, o cierra/cancela la asignación. Al cerrarla, los intentos en curso quedan vencidos.</p>
+    <pre><code>{ "fechaCierre": "2026-10-21T12:00:00-05:00", "intentosPermitidos": 2 }    o    { "estado": "CERRADA" }</code></pre>
+  </article>
+
+  <article class="ep">
+    <div class="ep-head"><span class="m get">GET</span><code>/classrooms/:id/results</code><span class="roles">Administrador · Gestor · Profesor del aula</span></div>
+    <p>Resultado de cada intento del aula: estudiante, estado, respondidas, correctas, incorrectas, sin responder y porcentaje. Filtra una asignación con <code>?asignacionId=</code>.</p>
+  </article>
+
+  <h3>Para estudiantes</h3>
+
+  <article class="ep">
+    <div class="ep-head"><span class="m post">POST</span><code>/classrooms/enroll</code><span class="roles">Estudiante</span></div>
+    <p>Se une a un aula con el código que dio el profesor (no distingue mayúsculas).</p>
+    <pre><code>{ "codigo": "MATE11A-2026" }</code></pre>
+    <ul><li><code>400 INVITATION_INVALID</code>: código inexistente, inactivo, vencido o sin usos.</li><li><code>409 ALREADY_ENROLLED</code>: ya estás en el aula (o fuiste retirado).</li></ul>
+  </article>
+
+  <article class="ep">
+    <div class="ep-head"><span class="m get">GET</span><code>/classrooms/mine</code><span class="roles">Estudiante</span></div>
+    <p>Tus aulas activas con sus asignaciones. Por cada asignación: <code>estado</code> calculado, <code>intentosPermitidos</code>, <code>intentosUsados</code> e <code>intentoEnProgreso</code> (ID para continuar, o <code>null</code>).</p>
+  </article>
+</section>
+
+<section id="intentos" class="ref">
+  <h2>Intentos</h2>
+  <p>Un intento es la presentación de un cuestionario por un estudiante. Puede ser <strong>libre</strong> (práctica con cualquier cuestionario publicado) o <strong>asignado</strong> (desde una asignación del aula).</p>
+  <div class="note">
+    <strong>Tiempo límite:</strong> cada intento tiene una <code>fechaLimite</code> = hora de inicio + suma de la duración de las sesiones (con 1 minuto de margen). Pasado ese límite, o si la asignación se cierra, el intento pasa a <code>VENCIDO</code>. Las respuestas ya guardadas sí cuentan para el puntaje.<br>
+    <strong>Estados:</strong> <code>EN_PROGRESO</code>, <code>FINALIZADO</code>, <code>VENCIDO</code>.
+  </div>
+
+  <article class="ep">
+    <div class="ep-head"><span class="m get">GET</span><code>/attempts</code><span class="roles">Estudiante</span></div>
+    <p>Historial de tus intentos con su puntaje.</p>
+  </article>
+
+  <article class="ep">
+    <div class="ep-head"><span class="m post">POST</span><code>/attempts/free</code><span class="roles">Estudiante</span></div>
+    <p>Inicia un intento de práctica libre.</p>
+    <pre><code>{ "cuestionarioId": "id-cuestionario" }</code></pre>
+  </article>
+
+  <article class="ep">
+    <div class="ep-head"><span class="m post">POST</span><code>/attempts/assignments/:assignmentId</code><span class="roles">Estudiante</span></div>
+    <p>Inicia un intento de una asignación de tu aula. Sin cuerpo.</p>
+    <ul>
+      <li><code>409 ATTEMPT_IN_PROGRESS</code>: ya tienes uno abierto; su ID viene en <code>error.details.intentoId</code> para continuarlo.</li>
+      <li><code>409 ATTEMPTS_EXHAUSTED</code>: usaste todos los intentos permitidos.</li>
+      <li><code>403 ASSIGNMENT_CLOSED</code>: la asignación aún no abre o ya cerró.</li>
+    </ul>
+  </article>
+
+  <article class="ep">
+    <div class="ep-head"><span class="m get">GET</span><code>/attempts/:id</code><span class="roles">Estudiante (dueño)</span></div>
+    <p>Carga el intento para presentarlo: estado, <code>fechaLimite</code>, sesiones e ítems con enunciado, estímulo, recursos, opciones y tu <code>respuesta</code> guardada (si existe). Nunca incluye la respuesta correcta.</p>
+    <pre><code>{ "data": {
+  "id": "…", "estado": "EN_PROGRESO", "fechaInicio": "…", "fechaLimite": "…",
+  "sesiones": [ { "id": "…", "nombre": "Sesión 1", "duracionMinutos": 45, "items": [
+    { "id": "id-item", "enunciado": "…", "estimulo": { "titulo": "…", "contenido": "…" },
+      "opciones": [ { "id": "id-opcion", "letra": "A", "contenido": "10:00" } ],
+      "respuesta": null }
+  ] } ]
+} }</code></pre>
+  </article>
+
+  <article class="ep">
+    <div class="ep-head"><span class="m put">PUT</span><code>/attempts/:id/answers/:itemId</code><span class="roles">Estudiante (dueño)</span></div>
+    <p>Guarda o reemplaza la respuesta de un ítem. Envía la opción elegida (<code>opciones[].id</code>); <code>tiempoSegundos</code> es opcional.</p>
+    <pre><code>{ "opcionId": "id-opcion", "tiempoSegundos": 42 }</code></pre>
+    <ul>
+      <li><code>400 INVALID_OPTION</code>: la opción no pertenece a esa pregunta.</li>
+      <li><code>403 ATTEMPT_EXPIRED</code>: se acabó el tiempo o cerró la asignación (el intento queda <code>VENCIDO</code>).</li>
+      <li><code>409 ATTEMPT_FINISHED</code>: el intento ya se entregó.</li>
+    </ul>
+  </article>
+
+  <article class="ep">
+    <div class="ep-head"><span class="m post">POST</span><code>/attempts/:id/finish</code><span class="roles">Estudiante (dueño)</span></div>
+    <p>Entrega el intento y devuelve el puntaje en <code>resultado</code>. Si ya había expirado, queda como <code>VENCIDO</code> en lugar de <code>FINALIZADO</code>.</p>
+  </article>
+
+  <article class="ep">
+    <div class="ep-head"><span class="m get">GET</span><code>/attempts/:id/result</code><span class="roles">Estudiante (dueño)</span></div>
+    <p>Puntaje del intento: total de preguntas, respondidas, correctas, incorrectas, sin responder y <code>porcentaje</code>.</p>
+  </article>
+
+  <article class="ep">
+    <div class="ep-head"><span class="m get">GET</span><code>/attempts/:id/review</code><span class="roles">Administrador · Profesor del aula · Gestor</span></div>
+    <p>Revisión pedagógica de un intento: por cada ítem, la respuesta del estudiante, la <code>clave</code> (opción correcta, justificación, explicación) y <code>correcta</code> (<code>true</code>, <code>false</code> o <code>null</code> si no respondió). Los intentos libres solo los revisa el administrador.</p>
+  </article>
+</section>
+
+<section id="auditoria" class="ref">
+  <h2>Auditoría</h2>
+
+  <article class="ep">
+    <div class="ep-head"><span class="m get">GET</span><code>/audit</code><span class="roles">Administrador</span></div>
+    <p>Bitácora de acciones administrativas (activación de usuarios, aprobaciones, vinculaciones, publicaciones, importaciones…), con datos antes/después, autor e IP.</p>
+    <p>Filtros: <code>?institutionId=</code>, <code>?userId=</code>, <code>?entity=</code> (p. ej. <code>usuario</code>, <code>institucion</code>, <code>cuestionario</code>), <code>?entityId=</code>, <code>?limit=</code>, <code>?offset=</code>.</p>
+  </article>
+</section>
+
+<p id="no-results" class="hidden lead">No hay endpoints que coincidan con la búsqueda.</p>
+</main>
+</div>
+<script src="/api/documentacion/docs.js"></script>
+</body>
+</html>
